@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: Generate project & build (app + widget)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
 
   screenshot:
     name: App screenshot (best effort)
-    runs-on: macos-14
+    runs-on: macos-15
     continue-on-error: true
     needs: build
     steps:
@@ -51,20 +51,24 @@ jobs:
       - name: Build, install & screenshot in simulator
         run: |
           set -x
-          DEVICE="iPhone 15"
-          xcrun simctl boot "$DEVICE" || true
+          # Pick the first available iPhone simulator, whatever the image provides.
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; ids=[v['udid'] for vs in d.values() for v in vs if 'iPhone' in v['name']]; print(ids[0] if ids else '')")
+          echo "Simulator UDID: $UDID"
+          test -n "$UDID"
+          xcrun simctl boot "$UDID" || true
           xcodebuild build \
             -project WeatherUV.xcodeproj \
             -scheme WeatherUV \
-            -destination "platform=iOS Simulator,name=$DEVICE" \
+            -destination "id=$UDID" \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
           APP=$(find build/Build/Products -name 'WeatherUV.app' -type d | head -1)
           echo "App bundle: $APP"
-          xcrun simctl install booted "$APP"
-          xcrun simctl launch booted com.example.WeatherUV || true
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.example.WeatherUV || true
           sleep 8
-          xcrun simctl io booted screenshot app.png || true
+          xcrun simctl io "$UDID" screenshot app.png || true
 
       - name: Upload screenshot
         uses: actions/upload-artifact@v4
