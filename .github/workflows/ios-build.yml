@@ -1,0 +1,74 @@
+name: iOS Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Generate project & build (app + widget)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (simulator, no signing)
+        run: |
+          xcodebuild build \
+            -project WeatherUV.xcodeproj \
+            -scheme WeatherUV \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+  screenshot:
+    name: App screenshot (best effort)
+    runs-on: macos-14
+    continue-on-error: true
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build, install & screenshot in simulator
+        run: |
+          set -x
+          DEVICE="iPhone 15"
+          xcrun simctl boot "$DEVICE" || true
+          xcodebuild build \
+            -project WeatherUV.xcodeproj \
+            -scheme WeatherUV \
+            -destination "platform=iOS Simulator,name=$DEVICE" \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          APP=$(find build/Build/Products -name 'WeatherUV.app' -type d | head -1)
+          echo "App bundle: $APP"
+          xcrun simctl install booted "$APP"
+          xcrun simctl launch booted com.example.WeatherUV || true
+          sleep 8
+          xcrun simctl io booted screenshot app.png || true
+
+      - name: Upload screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-screenshot
+          path: app.png
+          if-no-files-found: ignore
