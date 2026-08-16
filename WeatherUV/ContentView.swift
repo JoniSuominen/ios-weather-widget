@@ -3,6 +3,7 @@ import WidgetKit
 
 struct ContentView: View {
     @State private var selection = 0
+    @StateObject private var connectorManager = ConnectorManager()
 
     var body: some View {
         TabView(selection: $selection) {
@@ -11,11 +12,15 @@ struct ContentView: View {
             WidgetStudioView().tabItem { Label("Widgets", systemImage: "rectangle.3.group.fill") }.tag(2)
         }
         .tint(.indigo)
+        .environmentObject(connectorManager)
+        .task { await connectorManager.refreshConnectedSources() }
     }
 }
 
 private struct DashboardView: View {
-    @State private var metrics = DashboardStore.metrics
+    @EnvironmentObject private var connectorManager: ConnectorManager
+
+    private var metrics: [DashboardMetric] { connectorManager.metrics }
 
     var body: some View {
         NavigationStack {
@@ -32,42 +37,57 @@ private struct DashboardView: View {
                             .font(.system(size: 38)).foregroundStyle(.indigo)
                     }
 
-                    hero
-                    LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 12) {
-                        ForEach(metrics.dropFirst()) { MetricCard(metric: $0) }
+                    if metrics.isEmpty {
+                        ContentUnavailableView(
+                            "No connected data",
+                            systemImage: "link.badge.plus",
+                            description: Text("Connect Apple Health, Oura, or Calendar from the Sources tab.")
+                        )
+                        .frame(minHeight: 300)
+                    } else {
+                        hero
+                        LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 12) {
+                            ForEach(metrics.dropFirst()) { MetricCard(metric: $0) }
+                        }
+                        freshness
                     }
-                    freshness
                 }
                 .padding()
             }
             .background(Color(.systemGroupedBackground))
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(action: {}) { Image(systemName: "bell") } } }
-            .refreshable { metrics = DashboardStore.metrics }
+            .refreshable { await connectorManager.refreshConnectedSources() }
         }
     }
 
+    @ViewBuilder
     private var hero: some View {
-        let metric = metrics.first ?? DashboardMetric.defaults[0]
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack { Label("DAILY OVERVIEW", systemImage: "sparkles").font(.caption.bold()); Spacer(); Text("OURA").font(.caption2.bold()) }
-            HStack(alignment: .lastTextBaseline) {
-                Text(metric.value).font(.system(size: 58, weight: .bold, design: .rounded))
-                Text(metric.detail).font(.headline).opacity(0.85)
-                Spacer()
+        if let metric = metrics.first {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack { Label("DAILY OVERVIEW", systemImage: "sparkles").font(.caption.bold()); Spacer(); Text(metric.source.displayName.uppercased()).font(.caption2.bold()) }
+                HStack(alignment: .lastTextBaseline) {
+                    Text(metric.value).font(.system(size: 58, weight: .bold, design: .rounded))
+                    Text(metric.detail).font(.headline).opacity(0.85)
+                    Spacer()
+                }
+                Text(metric.title).font(.subheadline.bold())
             }
-            ProgressView(value: 0.86).tint(.white)
-            Text("Your recovery is looking strong. A good day to take on something ambitious.").font(.subheadline)
+            .foregroundStyle(.white).padding(20)
+            .background(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 24))
         }
-        .foregroundStyle(.white).padding(20)
-        .background(LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 24))
     }
 
     private var freshness: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            Text("All data synced just now").font(.footnote).foregroundStyle(.secondary)
+            Text(freshnessText).font(.footnote).foregroundStyle(.secondary)
             Spacer()
         }.padding(.top, 4)
+    }
+
+    private var freshnessText: String {
+        guard let updatedAt = connectorManager.updatedAt else { return "Waiting for first refresh" }
+        return "Updated \(updatedAt.formatted(.relative(presentation: .named)))"
     }
 }
 
@@ -78,7 +98,7 @@ private struct MetricCard: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack { Image(systemName: metric.symbol).foregroundStyle(color); Spacer(); Text(metric.source == .appleHealth ? "HEALTH" : metric.source == .oura ? "OURA" : "CAL").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary) }
+            HStack { Image(systemName: metric.symbol).foregroundStyle(color); Spacer(); Text(metric.source.displayName.uppercased()).font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary) }
             Text(metric.title).font(.subheadline).foregroundStyle(.secondary)
             Text(metric.value).font(.title2.bold()).lineLimit(1).minimumScaleFactor(0.7)
             Text(metric.detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -87,7 +107,9 @@ private struct MetricCard: View {
 }
 
 private struct SourcesView: View {
-    @State private var connected = DashboardStore.connectedSources
+    @EnvironmentObject private var connectorManager: ConnectorManager
+    @State private var showingDeleteConfirmation = false
+
     var body: some View {
         NavigationStack {
             List {
@@ -96,18 +118,65 @@ private struct SourcesView: View {
                     ForEach(DataSource.allCases) { source in
                         HStack(spacing: 14) {
                             Image(systemName: source.symbol).frame(width: 42, height: 42).foregroundStyle(.white).background(source == .appleHealth ? .pink : source == .oura ? .purple : .blue, in: RoundedRectangle(cornerRadius: 12))
-                            VStack(alignment: .leading) { Text(source.rawValue).font(.headline); Text(description(source)).font(.caption).foregroundStyle(.secondary) }
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(source.displayName).font(.headline)
+                                Text(description(source)).font(.caption).foregroundStyle(.secondary)
+                                if case .failed(let message) = connectorManager.activity(for: source) {
+                                    Text(message).font(.caption2).foregroundStyle(.red)
+                                }
+                            }
                             Spacer()
-                            Button(connected.contains(source) ? "Connected" : "Connect") { toggle(source) }.buttonStyle(.bordered).tint(connected.contains(source) ? .green : .indigo)
+                            sourceButton(source)
                         }.padding(.vertical, 5)
                     }
                 }
                 Section("Privacy") { Label("Your widget data stays on this device and in the shared app container.", systemImage: "lock.shield.fill").font(.footnote).foregroundStyle(.secondary) }
+                Section {
+                    Button("Delete local data", role: .destructive) { showingDeleteConfirmation = true }
+                }
             }.navigationTitle("Data sources")
+                .confirmationDialog(
+                    "Delete Pulseboard data?",
+                    isPresented: $showingDeleteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete local data", role: .destructive) {
+                        Task { await connectorManager.deleteLocalData() }
+                    }
+                } message: {
+                    Text("This removes cached metrics and connection state. System permissions remain controlled by iOS Settings.")
+                }
         }
     }
-    private func description(_ source: DataSource) -> String { switch source { case .appleHealth: "Activity, heart & sleep"; case .oura: "Readiness & recovery"; case .googleCalendar: "Events & focus time" } }
-    private func toggle(_ source: DataSource) { if connected.contains(source) { connected.remove(source) } else { connected.insert(source) }; DashboardStore.connectedSources = connected; WidgetCenter.shared.reloadAllTimelines() }
+
+    @ViewBuilder
+    private func sourceButton(_ source: DataSource) -> some View {
+        let activity = connectorManager.activity(for: source)
+        if activity.isBusy {
+            ProgressView().frame(width: 82)
+        } else if connectorManager.connectedSources.contains(source) {
+            Menu {
+                Button("Refresh") { Task { await connectorManager.refresh(source) } }
+                Button("Disconnect", role: .destructive) { Task { await connectorManager.disconnect(source) } }
+            } label: {
+                Text("Connected")
+            }
+            .buttonStyle(.bordered)
+            .tint(.green)
+        } else {
+            Button("Connect") { Task { await connectorManager.connect(source) } }
+                .buttonStyle(.bordered)
+                .tint(.indigo)
+        }
+    }
+
+    private func description(_ source: DataSource) -> String {
+        switch source {
+        case .appleHealth: "Steps and resting heart rate"
+        case .oura: "Sleep shared with Apple Health"
+        case .googleCalendar: "Calendars configured on this iPhone"
+        }
+    }
 }
 
 private struct WidgetStudioView: View {

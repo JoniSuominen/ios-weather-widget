@@ -12,7 +12,6 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
     CODE_SIGN_STYLE: Automatic
-    PRODUCT_NAME: Pulseboard
     # Leave DEVELOPMENT_TEAM empty; set your own Team in Xcode when you have one.
     DEVELOPMENT_TEAM: ""
     GENERATE_INFOPLIST_FILE: NO
@@ -27,6 +26,7 @@ targets:
       - path: Shared
     settings:
       base:
+        PRODUCT_NAME: Pulseboard
         PRODUCT_BUNDLE_IDENTIFIER: com.example.WeatherUV
         INFOPLIST_FILE: WeatherUV/Info.plist
         CODE_SIGN_ENTITLEMENTS: WeatherUV/WeatherUV.entitlements

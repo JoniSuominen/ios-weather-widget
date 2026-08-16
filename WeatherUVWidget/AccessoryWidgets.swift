@@ -8,7 +8,7 @@ struct WeatherUVAccessoryWidget: Widget {
             AccessoryView(entry: entry).containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName("Pulseboard glance")
-        .description("Your readiness and next event.")
+        .description("A selected metric and your next event.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
@@ -16,16 +16,33 @@ struct WeatherUVAccessoryWidget: Widget {
 struct AccessoryView: View {
     @Environment(\.widgetFamily) private var family
     let entry: DashboardEntry
-    private var readiness: DashboardMetric { entry.metrics.first(where: { $0.id == "readiness" }) ?? DashboardMetric.defaults[0] }
-    private var event: DashboardMetric { entry.metrics.first(where: { $0.id == "nextEvent" }) ?? DashboardMetric.defaults[4] }
+    private var primary: DashboardMetric? {
+        entry.metrics.first(where: { $0.id == "readiness" }) ?? entry.metrics.first
+    }
+    private var event: DashboardMetric? { entry.metrics.first(where: { $0.id == "nextEvent" }) }
+
     var body: some View {
-        switch family {
-        case .accessoryCircular:
-            Gauge(value: Double(readiness.value) ?? 0, in: 0...100) { Text("Ready") } currentValueLabel: { Text(readiness.value) }.gaugeStyle(.accessoryCircular)
-        case .accessoryRectangular:
-            VStack(alignment: .leading) { Label("Readiness \(readiness.value)", systemImage: "sparkles").font(.headline); Label("\(event.value) · \(event.detail)", systemImage: "calendar").font(.caption).lineLimit(1) }
-        default:
-            Label("Ready \(readiness.value) · \(event.value)", systemImage: "sparkles")
+        if let primary {
+            switch family {
+            case .accessoryCircular:
+                Gauge(value: Double(primary.value) ?? 0, in: 0...100) {
+                    Text(primary.title)
+                } currentValueLabel: {
+                    Text(primary.value)
+                }
+                .gaugeStyle(.accessoryCircular)
+            case .accessoryRectangular:
+                VStack(alignment: .leading) {
+                    Label("\(primary.title) \(primary.value)", systemImage: primary.symbol).font(.headline)
+                    if let event {
+                        Label("\(event.value) · \(event.detail)", systemImage: "calendar").font(.caption).lineLimit(1)
+                    }
+                }
+            default:
+                Label("\(primary.title) \(primary.value)", systemImage: primary.symbol)
+            }
+        } else {
+            Label("Open Pulseboard", systemImage: "link.badge.plus")
         }
     }
 }

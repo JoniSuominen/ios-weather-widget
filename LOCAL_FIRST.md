@@ -3,11 +3,12 @@
 ## Short answer
 
 Pulseboard currently works completely locally. It has no login, server, analytics SDK,
-cloud database, or runtime API request. `DashboardStore` writes two values to the app's
+cloud database, or runtime API request. `DashboardStore` writes three values to the app's
 shared App Group `UserDefaults`:
 
 - the latest array of dashboard metrics;
-- the set of source toggles marked as connected.
+- the set of sources marked as connected;
+- the snapshot update time.
 
 The widget extension reads the same App Group and renders that snapshot. The sample
 metrics are compiled into the app and are used when no snapshot has been saved.
@@ -56,10 +57,9 @@ open-source binary cannot keep an embedded client secret secret. A small statele
 broker may be appropriate, but it is still an online service even if it stores no user
 database. Document this clearly and keep tokens in Keychain, never `UserDefaults`.
 
-For a first free/open-source release, the recommended scope is HealthKit + EventKit,
-with Oura data consumed through Apple Health where available. Add direct Oura API
-support later as an optional feature after its authentication and operating costs are
-decided.
+The implemented scope is HealthKit + EventKit, with Oura sleep data consumed through
+Apple Health where available. Direct Oura API support should only be added if its extra
+metrics justify OAuth infrastructure, operational ownership, and privacy cost.
 
 ## What “local” does and does not mean
 
@@ -91,13 +91,13 @@ decided.
 
 - [ ] Replace all example bundle and App Group identifiers.
 - [ ] Add a `LICENSE` file with the chosen OSI-approved license.
-- [ ] Add HealthKit and calendar usage descriptions to `Info.plist`.
-- [ ] Add HealthKit capability to the host app; do not give the widget direct HealthKit
+- [x] Add HealthKit and calendar usage descriptions to `Info.plist`.
+- [x] Add HealthKit capability to the host app; do not give the widget direct HealthKit
       access. The host should publish a minimal snapshot for the widget.
-- [ ] Implement EventKit authorization and filter out private event details that are not
+- [x] Implement EventKit authorization and filter out private event details that are not
       needed by the selected widget.
-- [ ] Implement local-data deletion and permission-status screens.
-- [ ] Remove the unused weather/location code and location permission.
+- [x] Implement local-data deletion and connector error states.
+- [ ] Remove the unused weather/location code. The location permission has been removed.
 - [ ] Replace sample values with honest empty/loading/error states.
 - [ ] Add a privacy policy URL and complete App Store privacy answers based on the final
       binary's actual behavior.

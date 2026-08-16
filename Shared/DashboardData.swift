@@ -7,6 +7,13 @@ enum DataSource: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    var displayName: String {
+        switch self {
+        case .googleCalendar: return "Calendar"
+        default: return rawValue
+        }
+    }
+
     var symbol: String {
         switch self {
         case .appleHealth: return "heart.fill"
@@ -38,6 +45,7 @@ enum DashboardStore {
     static let appGroupID = "group.com.example.WeatherUV"
     private static let metricsKey = "dashboard.metrics"
     private static let sourcesKey = "dashboard.sources"
+    private static let updatedAtKey = "dashboard.updatedAt"
 
     private static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupID) ?? .standard
@@ -47,7 +55,11 @@ enum DashboardStore {
         get {
             guard let data = defaults.data(forKey: metricsKey),
                   let metrics = try? JSONDecoder().decode([DashboardMetric].self, from: data) else {
+#if targetEnvironment(simulator)
                 return DashboardMetric.defaults
+#else
+                return []
+#endif
             }
             return metrics
         }
@@ -58,9 +70,40 @@ enum DashboardStore {
 
     static var connectedSources: Set<DataSource> {
         get {
-            let values = defaults.stringArray(forKey: sourcesKey) ?? [DataSource.appleHealth.rawValue]
+            let values = defaults.stringArray(forKey: sourcesKey) ?? []
             return Set(values.compactMap(DataSource.init(rawValue:)))
         }
         set { defaults.set(newValue.map(\.rawValue), forKey: sourcesKey) }
+    }
+
+    static var updatedAt: Date? {
+        get { defaults.object(forKey: updatedAtKey) as? Date }
+        set { defaults.set(newValue, forKey: updatedAtKey) }
+    }
+
+    static func replaceMetrics(_ newMetrics: [DashboardMetric], for source: DataSource) {
+        let hasStoredSnapshot = defaults.data(forKey: metricsKey) != nil
+        var current = hasStoredSnapshot ? metrics : []
+        current.removeAll { $0.source == source }
+        current.append(contentsOf: newMetrics)
+        let order = ["readiness", "sleep", "steps", "heart", "nextEvent"]
+        current.sort {
+            (order.firstIndex(of: $0.id) ?? order.count) <
+                (order.firstIndex(of: $1.id) ?? order.count)
+        }
+        metrics = current
+        updatedAt = .now
+    }
+
+    static func removeMetrics(for source: DataSource) {
+        guard defaults.data(forKey: metricsKey) != nil else { return }
+        metrics = metrics.filter { $0.source != source }
+        updatedAt = .now
+    }
+
+    static func deleteLocalData() {
+        defaults.removeObject(forKey: metricsKey)
+        defaults.removeObject(forKey: sourcesKey)
+        defaults.removeObject(forKey: updatedAtKey)
     }
 }

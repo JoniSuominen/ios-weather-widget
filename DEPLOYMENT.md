@@ -9,10 +9,8 @@ This guide separates three different goals that are easy to confuse:
 | Put the app and widget on an iPhone reliably | A Mac, iPhone, and usually Apple Developer Program membership | Apple currently charges for membership |
 | Give the app to other testers | Apple Developer Program membership and TestFlight | Membership required |
 
-> **Important:** Pulseboard is currently a visual prototype with shared widget
-> storage. Oura, Apple Health, and Google Calendar authentication is not implemented.
-> The Connect buttons save a local demonstration state, and the metrics are sample
-> data. This is expected—not a setup failure.
+> **Important:** Apple Health and Calendar permissions are implemented. Oura sleep is
+> read through Apple Health; direct Oura API authentication is not implemented.
 
 ## Option A: verify the build on GitHub (no Mac)
 
@@ -62,8 +60,9 @@ the next `xcodegen generate` can overwrite them.
 2. Select an installed iPhone simulator, such as **iPhone 16 Pro**.
 3. Press the triangular Run button or **⌘R**.
 4. The simulator should open Pulseboard. Test the Today, Sources, and Widgets tabs.
-5. In Sources, toggle connection buttons. Close and reopen the app to confirm the
-   demonstration state persists.
+5. In Sources, connect Calendar and grant permission. Apple Health availability and
+   sample data vary by simulator runtime; use a physical iPhone for final Health tests.
+6. Close and reopen the app to confirm connection state and cached metrics persist.
 
 No signing team is necessary for a simulator build.
 
@@ -223,7 +222,8 @@ with a globally unique prefix you control, then regenerate the project.
 Confirm that both targets have the exact same App Group entitlement and that
 `DashboardStore.appGroupID` matches it. Then launch the app once and request a refresh.
 
-### The Connect buttons do not open Apple/Google/Oura login
+### A connector does not return data
 
-That is the current prototype behavior. Provider authorization and API clients are a
-separate implementation step; credentials alone will not activate these buttons.
+Apple Health and Oura use iOS Health permissions; Calendar uses the iOS Calendar
+permission. Pulseboard does not show Google or Oura login pages. Configure Google
+Calendar and Oura-to-Apple-Health sharing in their respective apps and iOS Settings.
