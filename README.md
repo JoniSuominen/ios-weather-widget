@@ -1,56 +1,34 @@
-# WeatherUV
+# Pulseboard
 
-A minimal iOS app whose whole point is **glanceable widgets for current temperature and UV index**, in the smallest widget footprints iOS offers:
+Pulseboard is an iOS 17 SwiftUI app for building a calm, glanceable personal dashboard from **Oura, Apple Health, and Google Calendar**. It includes Home Screen and Lock Screen widgets backed by an App Group, so the app and WidgetKit extension share the same snapshot.
 
-- **Home Screen — small** (`systemSmall`, the smallest Home Screen size): temperature, weather icon, and a color-coded UV badge.
-- **Lock Screen — accessory widgets** (iOS 17+), the smallest surfaces on iOS:
-  - **Circular** — a UV gauge (most glanceable).
-  - **Rectangular** — temperature + condition, and UV level.
-  - **Inline** — `☀️ 21° · UV 4` next to the clock.
+## What is included
 
-Weather comes from the free [Open-Meteo](https://open-meteo.com) API — **no account or API key required**.
+- A polished Today dashboard with readiness, sleep, steps, heart rate, and the next calendar event.
+- A Sources screen for managing Apple Health, Oura, and Google Calendar connections.
+- A Widget Studio with layout previews and manual timeline refresh.
+- Small and medium Home Screen widgets plus circular, rectangular, and inline Lock Screen widgets.
+- A codable shared data model and App Group store ready for real connector results.
 
-## How the project is structured
+The repository deliberately ships preview data so the complete app and widgets are useful in the simulator before credentials are configured. The source buttons currently persist connection state locally; production integrations still require:
+
+1. HealthKit capabilities and read authorization for the HealthKit data types you choose.
+2. An Oura developer application, OAuth callback URL, and token exchange service.
+3. A Google Cloud OAuth client and Calendar API scope.
+
+Never put OAuth client secrets in the app. Exchange authorization codes in a backend, store user tokens in Keychain, normalize fetched values into `DashboardMetric`, then assign them to `DashboardStore.metrics` and reload WidgetKit timelines.
+
+## Structure
 
 ```
-WeatherUV/            Host app (SwiftUI). Shows current conditions + settings.
-WeatherUVWidget/      WidgetKit extension: small + accessory widgets.
-Shared/               Code shared by both targets (networking, model, location, storage).
-project.yml           XcodeGen spec — the source of truth for the Xcode project.
-.github/workflows/    Cloud build on a GitHub Actions macOS runner.
+WeatherUV/            SwiftUI host app (the target keeps its legacy name)
+WeatherUVWidget/      WidgetKit extension
+Shared/               Shared dashboard models, persistence, and legacy weather code
+project.yml           XcodeGen project definition
+.github/workflows/    Simulator build and screenshot workflow
 ```
 
-An iOS app must ship a host app to contain a widget extension — widgets can't exist on their own. The app also lets you pick the location source.
-
-### Location
-
-- **Auto (GPS)** — default. The app asks for "When In Use" location permission, resolves your coordinate, and stores it in a shared App Group.
-- **Fixed city** — search a city in the app and pin it.
-
-The widget only ever *reads* the stored coordinate (it never uses live GPS), so it stays reliable. Both targets share data via the App Group `group.com.example.WeatherUV`.
-
-## Building — no Mac required
-
-Real iOS widgets require WidgetKit, which only compiles on macOS. This repo builds itself **in the cloud** using a GitHub Actions macOS runner — you don't need a Mac to verify it compiles.
-
-Every push runs `.github/workflows/ios-build.yml`, which:
-
-1. Installs [XcodeGen](https://github.com/yonaskolb/XcodeGen).
-2. Runs `xcodegen generate` to produce `WeatherUV.xcodeproj`.
-3. Runs `xcodebuild build` for the iOS Simulator with signing disabled — this compiles **both** the app and the embedded widget.
-4. (Best effort) boots a simulator, launches the app, and uploads a screenshot artifact named `app-screenshot`.
-
-> Note: CI can screenshot the **app UI**, but rendering the actual Home/Lock Screen **widget** in CI isn't reliably automatable — widget visuals are validated by compilation (and SwiftUI previews when you have a Mac).
-
-## Running it on a real iPhone (later)
-
-Getting a native iOS app onto a physical iPhone needs Apple code signing. Without a Mac, the path is:
-
-1. Enroll in the **Apple Developer Program** ($99/yr).
-2. Archive the app in CI (or [Xcode Cloud](https://developer.apple.com/xcode-cloud/)) and upload to **TestFlight**.
-3. Install via the **TestFlight** app on your iPhone — no Mac needed for this step.
-
-If you get access to a Mac, just run:
+## Build
 
 ```bash
 brew install xcodegen
@@ -58,10 +36,8 @@ xcodegen generate
 open WeatherUV.xcodeproj
 ```
 
-Then select your signing **Team** in Signing & Capabilities for both targets and run.
+Select your Apple Developer team and replace the example bundle identifiers and App Group before running on a device. A GitHub Actions macOS job also generates and builds both targets with signing disabled on every push.
 
-## Customizing
+## Next integration step
 
-- **Bundle identifier / App Group:** the defaults use `com.example`. If you change the prefix, update all three of: `project.yml` (both `PRODUCT_BUNDLE_IDENTIFIER`), the two `*.entitlements` files, and `appGroupID` in `Shared/SharedStore.swift`. Keep the app, the widget, and the App Group under the same prefix.
-- **Units:** `WeatherService.fetch` accepts `unit: "celsius"` or `"fahrenheit"`.
-- **Refresh cadence:** the widget timeline refreshes ~every 30 minutes (`WeatherUVWidget/Provider.swift`).
+Implement each provider behind a small connector protocol (`authorize`, `refresh`, `disconnect`). Keep provider-specific response objects out of WidgetKit: translate them to `DashboardMetric`, write one latest snapshot to the App Group, and ask `WidgetCenter` to reload. This keeps widget rendering fast and resilient when a phone is offline.
