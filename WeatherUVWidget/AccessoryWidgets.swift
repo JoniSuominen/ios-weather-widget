@@ -1,76 +1,48 @@
 import WidgetKit
 import SwiftUI
 
-/// Lock Screen widgets — the smallest glanceable surfaces on iOS (iOS 16+).
 struct WeatherUVAccessoryWidget: Widget {
-    let kind = "WeatherUVAccessoryWidget"
-
+    let kind = "PulseboardAccessoryWidget"
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            AccessoryView(weather: entry.weather)
-                .containerBackground(for: .widget) { Color.clear }
+            AccessoryView(entry: entry).containerBackground(for: .widget) { Color.clear }
         }
-        .configurationDisplayName("Weather + UV")
-        .description("Temperature and UV on your Lock Screen.")
+        .configurationDisplayName("Pulseboard glance")
+        .description("A selected metric and your next event.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }
 
 struct AccessoryView: View {
     @Environment(\.widgetFamily) private var family
-    let weather: WeatherData
+    let entry: DashboardEntry
+    private var primary: DashboardMetric? {
+        entry.metrics.first(where: { $0.id == "readiness" }) ?? entry.metrics.first
+    }
+    private var event: DashboardMetric? { entry.metrics.first(where: { $0.id == "nextEvent" }) }
 
     var body: some View {
-        switch family {
-        case .accessoryCircular:
-            circular
-        case .accessoryRectangular:
-            rectangular
-        case .accessoryInline:
-            inline
-        default:
-            inline
-        }
-    }
-
-    // Circular: a UV gauge — the most glanceable, smallest possible widget.
-    private var circular: some View {
-        Gauge(value: min(weather.uvIndex, 11), in: 0...11) {
-            Text("UV")
-        } currentValueLabel: {
-            Text("\(weather.uvRounded)")
-        }
-        .gaugeStyle(.accessoryCircular)
-        .tint(UVLevel(index: weather.uvIndex).color)
-    }
-
-    // Rectangular: temp + condition on top, UV level below.
-    private var rectangular: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Image(systemName: weather.symbolName)
-                Text("\(weather.temperatureRounded)°")
-                    .font(.headline)
-                Text(weather.conditionText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        if let primary {
+            switch family {
+            case .accessoryCircular:
+                Gauge(value: Double(primary.value) ?? 0, in: 0...100) {
+                    Text(primary.title)
+                } currentValueLabel: {
+                    Text(primary.value)
+                }
+                .gaugeStyle(.accessoryCircular)
+            case .accessoryRectangular:
+                VStack(alignment: .leading) {
+                    Label("\(primary.title) \(primary.value)", systemImage: primary.symbol).font(.headline)
+                    if let event {
+                        Label("\(event.value) · \(event.detail)", systemImage: "calendar").font(.caption).lineLimit(1)
+                    }
+                }
+            default:
+                Label("\(primary.title) \(primary.value)", systemImage: primary.symbol)
             }
-            HStack(spacing: 4) {
-                Image(systemName: "sun.max.trianglebadge.exclamationmark")
-                Text("UV \(weather.uvRounded) · \(UVLevel(index: weather.uvIndex).rawValue)")
-                    .font(.caption)
-            }
-        }
-        .widgetAccentable()
-    }
-
-    // Inline: single line next to the clock.
-    private var inline: some View {
-        Label {
-            Text("\(weather.temperatureRounded)° · UV \(weather.uvRounded)")
-        } icon: {
-            Image(systemName: weather.symbolName)
+        } else {
+            Label("Open Pulseboard", systemImage: "link.badge.plus")
         }
     }
 }

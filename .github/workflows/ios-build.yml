@@ -63,7 +63,8 @@ jobs:
             -destination "id=$UDID" \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
-          APP=$(find build/Build/Products -name 'WeatherUV.app' -type d | head -1)
+          APP=$(find build/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -type d | head -1)
+          test -n "$APP"
           echo "App bundle: $APP"
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl launch "$UDID" com.example.WeatherUV || true

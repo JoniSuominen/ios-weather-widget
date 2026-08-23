@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Weather+UV</string>
+	<string>Pulseboard</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -22,8 +22,10 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location is used to show current weather and UV for where you are.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Pulseboard reads upcoming events from calendars configured on this iPhone to show them in your dashboard and widgets.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Pulseboard reads steps, resting heart rate, and sleep data to show selected metrics in your dashboard and widgets.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

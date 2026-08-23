@@ -26,6 +26,7 @@ targets:
       - path: Shared
     settings:
       base:
+        PRODUCT_NAME: Pulseboard
         PRODUCT_BUNDLE_IDENTIFIER: com.example.WeatherUV
         INFOPLIST_FILE: WeatherUV/Info.plist
         CODE_SIGN_ENTITLEMENTS: WeatherUV/WeatherUV.entitlements
