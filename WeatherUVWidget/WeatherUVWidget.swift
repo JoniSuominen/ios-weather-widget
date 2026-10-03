@@ -1,64 +1,79 @@
 import WidgetKit
 import SwiftUI
 
-/// The small Home Screen widget (2x2) — the smallest Home Screen size.
 struct WeatherUVWidget: Widget {
-    let kind = "WeatherUVWidget"
+    let kind = "PulseboardWidget"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            SmallWidgetView(weather: entry.weather)
+            PulseboardWidgetView(entry: entry)
                 .containerBackground(for: .widget) {
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.35), Color.indigo.opacity(0.55)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                    LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
                 }
         }
-        .configurationDisplayName("Weather + UV")
-        .description("Current temperature and UV index at a glance.")
-        .supportedFamilies([.systemSmall])
+        .configurationDisplayName("Pulseboard")
+        .description("Health, recovery, and your schedule at a glance.")
+        .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 
-struct SmallWidgetView: View {
-    let weather: WeatherData
+struct PulseboardWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: DashboardEntry
 
     var body: some View {
-        let level = UVLevel(index: weather.uvIndex)
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                Image(systemName: weather.symbolName)
-                    .font(.system(size: 28))
-                    .symbolRenderingMode(.multicolor)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("PULSEBOARD").font(.caption2.bold()).tracking(1)
                 Spacer()
-                Text(weather.placeName)
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .foregroundStyle(.white.opacity(0.85))
+                Image(systemName: "sparkles")
+            }.foregroundStyle(.white.opacity(0.8))
+            if entry.metrics.isEmpty {
+                noData
+            } else if family == .systemSmall {
+                small
+            } else {
+                medium
             }
+            Spacer(minLength: 0)
+            Text("Updated \(entry.date, style: .relative)").font(.system(size: 9)).foregroundStyle(.white.opacity(0.6))
+        }.foregroundStyle(.white)
+    }
 
-            Spacer(minLength: 4)
-
-            Text("\(weather.temperatureRounded)°")
-                .font(.system(size: 46, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-
-            Spacer(minLength: 4)
-
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(level.color)
-                    .frame(width: 8, height: 8)
-                Text("UV \(weather.uvRounded)")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
-                Text(level.rawValue)
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.85))
+    @ViewBuilder
+    private var small: some View {
+        if let metric = entry.metrics.first {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(metric.value).font(.system(size: 48, weight: .bold, design: .rounded))
+                Text("\(metric.title) · \(metric.detail)").font(.caption.bold()).lineLimit(1)
             }
         }
-        .foregroundStyle(.white)
+    }
+
+    private var medium: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(entry.metrics.prefix(3))) { metric in
+                    metricRow(metric)
+                }
+            }
+        }
+    }
+
+    private var noData: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: "link.badge.plus").font(.title2)
+            Text("Open Pulseboard to connect a data source.").font(.caption.bold())
+        }
+    }
+
+    private func metricRow(_ metric: DashboardMetric) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: metric.symbol).frame(width: 16)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(metric.value).font(.subheadline.bold()).lineLimit(1)
+                Text(metric.title).font(.caption2).foregroundStyle(.white.opacity(0.7))
+            }
+        }
     }
 }
