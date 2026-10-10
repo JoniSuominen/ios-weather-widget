@@ -59,6 +59,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jonisuominen.pulseboard.tests
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Pulseboard.app/Pulseboard"
+        BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
       - target: WeatherUV
 

@@ -267,7 +267,7 @@ final class OuraAPIConnector: DashboardConnector {
         case 200: return (data, response)
         case 204 where allowEmpty: return (data, response)
         case 401 where allowUnauthorized: return (data, response)
-        case 400, 401 where isTokenRequest: throw OuraError.notConnected
+        case 400 where isTokenRequest: throw OuraError.notConnected
         case 401: throw OuraError.notConnected
         case 403: throw OuraError.permissionRequired
         case 429: throw OuraError.rateLimited
