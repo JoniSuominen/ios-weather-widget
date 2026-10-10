@@ -50,16 +50,19 @@ final class HealthKitConnector: DashboardConnector {
         let start = Calendar.current.startOfDay(for: .now)
         let predicate = HKQuery.predicateForSamples(withStart: start, end: .now)
         let statistics = try await statistics(for: type, predicate: predicate, options: .cumulativeSum)
-        let count = statistics?.sumQuantity()?.doubleValue(for: .count()) ?? 0
-        let value = count.formatted(.number.precision(.fractionLength(0)))
+        let count = statistics?.sumQuantity()?.doubleValue(for: .count())
+        let value = count?.formatted(.number.precision(.fractionLength(0))) ?? "—"
         return DashboardMetric(
             id: "steps",
             source: .appleHealth,
             title: "Steps",
             value: value,
-            detail: "Today",
+            detail: count == nil ? "No step data available" : "Today · goal 10,000",
             symbol: "figure.walk",
-            tint: "mint"
+            tint: "mint",
+            numericValue: count,
+            targetValue: 10000,
+            observedAt: count == nil ? nil : .now
         )
     }
 
@@ -80,7 +83,9 @@ final class HealthKitConnector: DashboardConnector {
             value: rate.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "—",
             detail: detail,
             symbol: "heart.fill",
-            tint: "pink"
+            tint: "pink",
+            numericValue: rate,
+            observedAt: sample?.endDate
         )
     }
 

@@ -39,7 +39,9 @@ final class OuraHealthConnector: DashboardConnector {
             value: asleep > 0 ? Self.durationFormatter.string(from: asleep) ?? "—" : "—",
             detail: asleep > 0 ? "Synced through Apple Health" : "No Oura sleep data found",
             symbol: "moon.stars.fill",
-            tint: "indigo"
+            tint: "indigo",
+            numericValue: asleep > 0 ? asleep : nil,
+            observedAt: ouraSamples.map(\.endDate).max()
         )
         return [sleepMetric]
     }
@@ -81,7 +83,13 @@ final class OuraHealthConnector: DashboardConnector {
             if interval.0 <= current.1 {
                 current.1 = max(current.1, interval.1)
             } else {
-                total += current.1.timeIntervalSince(current.0)
+                if interval.0.timeIntervalSince(current.1) > 2 * 60 * 60 {
+                    // Keep the latest sleep session instead of adding two nights
+                    // when both fall inside the query window.
+                    total = 0
+                } else {
+                    total += current.1.timeIntervalSince(current.0)
+                }
                 current = interval
             }
         }

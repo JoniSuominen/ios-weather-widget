@@ -1,0 +1,4 @@
+# Local development only. Copy to .dev.vars and fill privately.
+# Production values belong in Cloudflare Worker secrets, never in the iOS app.
+OURA_CLIENT_ID=
+OURA_CLIENT_SECRET=

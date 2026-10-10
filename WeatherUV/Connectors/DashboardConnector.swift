@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 protocol DashboardConnector {
     var source: DataSource { get }
 

@@ -22,6 +22,21 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>OuraBrokerURL</key>
+	<string>$(OURA_BROKER_URL)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.jonisuominen.pulseboard.oura</string>
+			<key>CFBundleURLSchemes</key>
+			<array><string>com.jonisuominen.pulseboard</string></array>
+		</dict>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array><string>com.jonisuominen.pulseboard.refresh</string></array>
+	<key>UIBackgroundModes</key>
+	<array><string>fetch</string></array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Pulseboard reads upcoming events from calendars configured on this iPhone to show them in your dashboard and widgets.</string>
 	<key>NSHealthShareUsageDescription</key>

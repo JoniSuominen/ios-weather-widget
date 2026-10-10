@@ -7,6 +7,18 @@ on:
   workflow_dispatch:
 
 jobs:
+  broker-tests:
+    name: OAuth broker security tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run broker tests
+        working-directory: Backend
+        run: npm test
+
   build:
     name: Generate project & build (app + widget)
     runs-on: macos-15
@@ -23,6 +35,14 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Select simulator
+        run: |
+          SIMULATOR_ID=$(xcrun simctl list devices available --json | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; ids=[v['udid'] for vs in d.values() for v in vs if 'iPhone' in v['name']]; print(ids[0] if ids else '')")
+          test -n "$SIMULATOR_ID"
+          echo "SIMULATOR_ID=$SIMULATOR_ID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          xcrun simctl bootstatus "$SIMULATOR_ID" -b
+
       - name: Build (simulator, no signing)
         run: |
           xcodebuild build \
@@ -32,6 +52,23 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
+
+      - name: Run iOS regression tests
+        run: |
+          xcodebuild test \
+            -project WeatherUV.xcodeproj \
+            -scheme WeatherUV \
+            -destination "id=$SIMULATOR_ID" \
+            -resultBundlePath TestResults.xcresult \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-test-results
+          path: TestResults.xcresult
+          if-no-files-found: ignore
 
   screenshot:
     name: App screenshot (best effort)
@@ -67,7 +104,7 @@ jobs:
           test -n "$APP"
           echo "App bundle: $APP"
           xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch "$UDID" com.example.WeatherUV || true
+          xcrun simctl launch "$UDID" com.jonisuominen.pulseboard
           sleep 8
           xcrun simctl io "$UDID" screenshot app.png || true
 

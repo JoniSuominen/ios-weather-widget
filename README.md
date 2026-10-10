@@ -1,39 +1,21 @@
 # Pulseboard
 
-Pulseboard is an iOS 17 SwiftUI app for building a calm, glanceable personal dashboard from **Oura, Apple Health, and Google Calendar**. It includes Home Screen and Lock Screen widgets backed by an App Group, so the app and WidgetKit extension share the same snapshot.
+Pulseboard is an iOS 17 SwiftUI dashboard with configurable Home Screen and Lock Screen widgets. It brings together Oura readiness and sleep, Apple Health steps and resting heart rate, and the next event from calendars configured on your iPhone.
 
-## What is included
+## Features
 
-- A polished Today dashboard with readiness, sleep, steps, heart rate, and the next calendar event.
-- Production connectors for Apple Health and calendars configured on the iPhone.
-- A local Oura connector for sleep samples that the Oura app writes to Apple Health.
-- A Widget Studio with layout previews and manual timeline refresh.
-- Small and medium Home Screen widgets plus circular, rectangular, and inline Lock Screen widgets.
-- A codable shared data model and App Group store ready for real connector results.
+- **Oura account:** OAuth sign-in with PKCE, direct Oura API reads, token refresh, and disconnect. Account tokens stay in Keychain; the Oura application secret belongs in the separately deployed token broker.
+- **Apple Health fallback:** select Apple Health for Oura sleep data shared by the Oura app. This mode needs no Oura sign-in or backend; proprietary Readiness scores require Oura account access.
+- **Apple Health and Calendar:** read the permitted data through HealthKit and EventKit. Google Calendar works when the account is configured in iOS Calendar.
+- **Widgets:** small and medium Home Screen widgets, plus circular, rectangular, and inline Lock Screen widgets. Choose a layout and metric; saved choices change the actual widget rendering.
+- **Honest freshness:** widgets show locally cached snapshots and source update times. Old data remains visibly stale; creating a widget timeline does not mark a source as refreshed.
+- **Refresh and privacy:** fetch on launch, returning to the foreground, manual refresh, and best-effort background refresh. Disconnect or delete local data from Sources.
 
-The repository ships preview data so the complete app and widgets remain useful in the simulator. On a device, connecting a source replaces preview metrics with live data. The app remains fully local: it makes no network requests and stores only its latest dashboard snapshot and source state in shared App Group `UserDefaults`. No hosted database or user account is required.
-
-The implemented connectors are:
-
-1. Apple Health reads today's steps and the latest resting heart rate.
-2. Oura reads sleep samples whose Apple Health source identifies the Oura app. Proprietary Readiness scores are not available through HealthKit.
-3. Calendar uses EventKit to read the next event from calendars connected in iOS—including Google calendars—without adding Google OAuth to Pulseboard.
-
-Never put OAuth client secrets in the app. If direct Oura API access is added, use a secure OAuth design and store user tokens in Keychain. Normalize fetched values into `DashboardMetric`, replace that source's snapshot through `DashboardStore`, and reload WidgetKit timelines.
-
-See [LOCAL_FIRST.md](LOCAL_FIRST.md) for the no-database architecture, privacy model, and realistic Oura trade-offs.
-
-## Structure
-
-```
-WeatherUV/            SwiftUI host app (the target keeps its legacy name)
-WeatherUVWidget/      WidgetKit extension
-Shared/               Shared dashboard models, persistence, and legacy weather code
-project.yml           XcodeGen project definition
-.github/workflows/    Simulator build and screenshot workflow
-```
+WidgetKit and iOS control background execution and widget reload timing. Background refresh is not a promise of continuous or exact-interval updates. Empty, denied-permission, and unavailable states do not substitute sample values for live data.
 
 ## Build
+
+On a Mac with Xcode and an iOS simulator runtime installed:
 
 ```bash
 brew install xcodegen
@@ -41,27 +23,38 @@ xcodegen generate
 open WeatherUV.xcodeproj
 ```
 
-Select your Apple Developer team and replace the example bundle identifiers and App Group before running on a device. A GitHub Actions macOS job also generates and builds both targets with signing disabled on every push.
+Choose the **WeatherUV** scheme and run on an iPhone simulator. The targets retain their original `WeatherUV` names; the app is named Pulseboard. The GitHub Actions workflow generates the project and runs the simulator checks. See [DEPLOYMENT.md](DEPLOYMENT.md) for signing, Oura setup, and the device release checklist.
 
-## First-time testing and deployment
+The configured identifiers are:
 
-If you have never built an iOS app, start with the simulator. It does not require an
-Apple Developer account, certificates, or a physical iPhone. Follow the complete
-step-by-step guide in [DEPLOYMENT.md](DEPLOYMENT.md).
+| Component | Identifier |
+| --- | --- |
+| App | `com.jonisuominen.pulseboard` |
+| Widget | `com.jonisuominen.pulseboard.widget` |
+| Shared App Group | `group.com.jonisuominen.pulseboard` |
 
-The short version is:
+Register these identifiers and the App Group with the signing Apple Developer team. Contributors must use identifiers they control and update both entitlements and the shared store consistently.
 
-1. On a Mac, install Xcode from the App Store and launch it once.
-2. Install XcodeGen with `brew install xcodegen`.
-3. Run `xcodegen generate` in this repository and open `WeatherUV.xcodeproj`.
-4. Select the **WeatherUV** scheme and an iPhone simulator, then press Run.
-5. For a real phone, replace every `com.example` identifier, configure the matching
-   App Group for both targets, choose your Apple Developer team, and run on the phone.
+## Enable direct Oura access
 
-The Connect buttons request real HealthKit or EventKit authorization and refresh the
-shared widget snapshot. Direct Oura API access is intentionally not implemented because
-it requires an Oura developer application and a secure OAuth token-exchange design.
+The integration code is included; a live Oura connection still requires owner setup:
 
-## Connector architecture
+1. Register an Oura developer application and its callback URI.
+2. Configure and deploy the HTTPS token broker following [Backend/README.md](Backend/README.md). Keep the Oura client secret in deployment secrets.
+3. Set the Xcode build setting **`OURA_BROKER_URL`** to the broker's HTTPS base URL. It populates **`OuraBrokerURL`** in the app's Info.plist. Regenerate the project after changing `project.yml`.
+4. Build the app, select **Oura account** in Sources, and connect. Verify authorization, refresh, cancellation, and disconnect on an iPhone.
 
-Implement each provider behind a small connector protocol (`authorize`, `refresh`, `disconnect`). Keep provider-specific response objects out of WidgetKit: translate them to `DashboardMetric`, write one latest snapshot to the App Group, and ask `WidgetCenter` to reload. This keeps widget rendering fast and resilient when a phone is offline.
+The broker publishes public OAuth configuration at `GET /config` and exchanges codes and refresh tokens. It has no user database and does not intentionally persist user tokens. The app fetches Oura metrics directly. With no broker configured, use **Apple Health** mode and enable Oura's Apple Health sharing.
+
+## Repository
+
+```text
+WeatherUV/            SwiftUI app and source connectors
+WeatherUVWidget/      WidgetKit extension
+Shared/               Dashboard models, configuration, and local persistence
+Backend/              Oura OAuth token broker and deployment instructions
+project.yml           XcodeGen project definition
+.github/workflows/    Simulator validation
+```
+
+Read [LOCAL_FIRST.md](LOCAL_FIRST.md) for the storage design and [PRIVACY.md](PRIVACY.md) for data handling. Pulseboard is available under the [MIT license](LICENSE). Release signing, a deployed Oura broker, App Store Connect setup, and physical-device acceptance testing remain the app owner's responsibility.

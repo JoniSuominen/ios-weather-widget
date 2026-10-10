@@ -13,3 +13,12 @@ WeatherUV.xcodeproj/
 
 # Screenshots produced locally
 app.png
+
+# Local OAuth deployment configuration and dependencies
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+node_modules/
+.wrangler/

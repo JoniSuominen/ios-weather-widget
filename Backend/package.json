@@ -1,0 +1,14 @@
+{
+  "name": "pulseboard-oura-broker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test",
+    "dev": "wrangler dev --local --local-protocol https",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run"
+  },
+  "devDependencies": { "wrangler": "4.86.0" }
+}

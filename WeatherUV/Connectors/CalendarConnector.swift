@@ -36,7 +36,8 @@ final class CalendarConnector: DashboardConnector {
             value: nextEvent?.title.nilIfBlank ?? "No upcoming events",
             detail: nextEvent.map(Self.eventDetail) ?? "Next 7 days",
             symbol: "calendar",
-            tint: "blue"
+            tint: "blue",
+            observedAt: nextEvent?.startDate
         )]
     }
 
