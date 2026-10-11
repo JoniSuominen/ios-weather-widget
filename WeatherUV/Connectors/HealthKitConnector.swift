@@ -28,8 +28,9 @@ final class HealthKitConnector: DashboardConnector {
         return [results.0, results.1]
     }
 
-    func disconnect() async {
+    func disconnect() async -> DisconnectResult {
         // iOS owns HealthKit grants. Users revoke them in Settings.
+        return .localOnly
     }
 
     private static var readTypes: Set<HKObjectType> {

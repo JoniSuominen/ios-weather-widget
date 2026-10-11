@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import WeatherUV
 
@@ -5,10 +6,12 @@ final class ConnectorManagerTests: XCTestCase {
     override func setUp() {
         super.setUp()
         DashboardStore.deleteLocalData()
+        clearOuraPreferences()
     }
 
     override func tearDown() {
         DashboardStore.deleteLocalData()
+        clearOuraPreferences()
         super.tearDown()
     }
 
@@ -82,13 +85,239 @@ final class ConnectorManagerTests: XCTestCase {
         XCTAssertTrue(DashboardStore.metrics.isEmpty)
         XCTAssertFalse(manager.connectedSources.contains(.appleHealth))
     }
+
+    @MainActor
+    func testCalendarTitleOptOutRejectsRefreshStartedUnderPreviousPreferences() async {
+        CalendarPreferences.selectedCalendarIDs = ["personal"]
+        CalendarPreferences.showEventTitles = true
+        let calendar = MockDashboardConnector(source: .googleCalendar)
+        calendar.customMetric = privateCalendarMetric()
+        calendar.holdRefresh = true
+        DashboardStore.connectedSources = [.googleCalendar]
+        DashboardStore.replaceMetrics([calendar.metric], for: .googleCalendar)
+        let started = expectation(description: "Calendar refresh started")
+        calendar.onRefresh = { started.fulfill() }
+        let manager = ConnectorManager(connectors: [calendar], directOuraConnector: MockDashboardConnector(source: .oura))
+        let refreshing = Task { await manager.refresh(.googleCalendar) }
+        await fulfillment(of: [started], timeout: 2)
+
+        CalendarPreferences.showEventTitles = false
+        XCTAssertTrue(DashboardStore.metrics.isEmpty)
+        calendar.resumeRefresh()
+        await refreshing.value
+
+        XCTAssertTrue(manager.metrics.isEmpty, "An old fetch must not restore the opted-out event title")
+        XCTAssertTrue(DashboardStore.metrics.isEmpty)
+        XCTAssertNil(DashboardStore.updatedAt(for: .googleCalendar))
+        XCTAssertEqual(manager.activity(for: .googleCalendar), .idle)
+    }
+
+    @MainActor
+    func testCalendarSelectionChangeRejectsPendingAuthorizationBeforeFetchingTitle() async {
+        CalendarPreferences.selectedCalendarIDs = ["personal"]
+        CalendarPreferences.showEventTitles = true
+        let calendar = MockDashboardConnector(source: .googleCalendar)
+        calendar.customMetric = privateCalendarMetric()
+        calendar.holdAuthorization = true
+        let started = expectation(description: "Calendar authorization started")
+        calendar.onAuthorize = { started.fulfill() }
+        let manager = ConnectorManager(connectors: [calendar], directOuraConnector: MockDashboardConnector(source: .oura))
+        let connecting = Task { await manager.connect(.googleCalendar) }
+        await fulfillment(of: [started], timeout: 2)
+
+        CalendarPreferences.selectedCalendarIDs = []
+        calendar.resumeAuthorization()
+        await connecting.value
+
+        XCTAssertEqual(calendar.authorizeCount, 1)
+        XCTAssertEqual(calendar.refreshCount, 0)
+        XCTAssertFalse(manager.connectedSources.contains(.googleCalendar))
+        XCTAssertTrue(manager.metrics.isEmpty)
+        XCTAssertTrue(DashboardStore.metrics.isEmpty)
+        XCTAssertEqual(manager.activity(for: .googleCalendar), .idle)
+    }
+
+    @MainActor
+    func testCalendarPreferenceChangeSynchronouslyClearsPublishedPrivateMetrics() {
+        CalendarPreferences.selectedCalendarIDs = ["personal"]
+        CalendarPreferences.showEventTitles = true
+        let calendar = MockDashboardConnector(source: .googleCalendar)
+        calendar.customMetric = privateCalendarMetric()
+        let health = MockDashboardConnector(source: .appleHealth)
+        DashboardStore.connectedSources = [.googleCalendar, .appleHealth]
+        DashboardStore.replaceMetrics([calendar.metric], for: .googleCalendar)
+        DashboardStore.replaceMetrics([health.metric], for: .appleHealth)
+        let manager = ConnectorManager(connectors: [calendar, health], directOuraConnector: MockDashboardConnector(source: .oura))
+        XCTAssertTrue(manager.metrics.contains { $0.privateValue != nil })
+
+        CalendarPreferences.showEventTitles = false
+        manager.calendarPreferencesDidChange()
+
+        XCTAssertEqual(manager.metrics, [health.metric])
+        XCTAssertEqual(DashboardStore.metrics, [health.metric])
+        XCTAssertEqual(calendar.refreshCount, 0, "The private cache must disappear before awaiting another fetch")
+        XCTAssertEqual(manager.activity(for: .googleCalendar), .idle)
+    }
+
+    @MainActor
+    func testDeleteReportsDirectCleanupFailureAndRetryStillUsesDirectConnectorAfterMethodReset() async {
+        setOuraMethod(.direct)
+        let local = MockDashboardConnector(source: .oura)
+        let direct = MockDashboardConnector(source: .oura)
+        let failure = DisconnectResult(localCredentialsCleared: false, remoteAuthorization: .unconfirmed)
+        direct.disconnectResult = failure
+        DashboardStore.connectedSources = [.oura]
+        DashboardStore.replaceMetrics([direct.metric], for: .oura)
+        let manager = ConnectorManager(connectors: [local], directOuraConnector: direct)
+
+        await manager.deleteLocalData()
+
+        XCTAssertEqual(manager.dataDeletionResult, failure)
+        XCTAssertEqual(manager.disconnectResults[.oura], failure)
+        XCTAssertEqual(manager.ouraConnectionMethod, .appleHealth)
+        XCTAssertFalse(manager.isDeletingLocalData)
+        XCTAssertTrue(manager.metrics.isEmpty)
+        XCTAssertTrue(manager.connectedSources.isEmpty)
+        XCTAssertEqual(direct.disconnectCount, 1)
+        XCTAssertEqual(local.disconnectCount, 1)
+
+        direct.disconnectResult = .revoked
+        await manager.retryOuraDisconnection()
+
+        XCTAssertEqual(direct.disconnectCount, 2)
+        XCTAssertEqual(local.disconnectCount, 1, "Retry must clean the direct account, even with Apple Health selected")
+        XCTAssertEqual(manager.disconnectResults[.oura], .revoked)
+        XCTAssertEqual(manager.dataDeletionResult, .revoked)
+    }
+
+    @MainActor
+    func testFailedDirectCleanupSurvivesRelaunchAndBlocksReconnectUntilDirectRetrySucceeds() async {
+        let local = MockDashboardConnector(source: .oura)
+        let direct = MockDashboardConnector(source: .oura)
+        let failure = DisconnectResult(localCredentialsCleared: false, remoteAuthorization: .revoked)
+        direct.disconnectResult = failure
+        let first = ConnectorManager(connectors: [local], directOuraConnector: direct)
+        await first.deleteLocalData()
+
+        let relaunched = ConnectorManager(connectors: [local], directOuraConnector: direct)
+        XCTAssertEqual(relaunched.disconnectResults[.oura], failure)
+        await relaunched.connect(.oura)
+
+        XCTAssertEqual(local.authorizeCount, 0)
+        XCTAssertEqual(direct.authorizeCount, 0)
+        XCTAssertEqual(local.refreshCount, 0)
+        XCTAssertFalse(relaunched.connectedSources.contains(.oura))
+        XCTAssertEqual(relaunched.activity(for: .oura), .failed(failure.statusMessage))
+
+        direct.disconnectResult = .revoked
+        await relaunched.retryOuraDisconnection()
+        await relaunched.connect(.oura)
+        XCTAssertEqual(direct.disconnectCount, 2)
+        XCTAssertEqual(local.authorizeCount, 1)
+        XCTAssertTrue(relaunched.connectedSources.contains(.oura))
+    }
+
+    @MainActor
+    func testFailedDirectCleanupBlocksMethodSwitchWithoutCallingLocalOrDirectDisconnect() async {
+        let local = MockDashboardConnector(source: .oura)
+        let direct = MockDashboardConnector(source: .oura)
+        let failure = DisconnectResult(localCredentialsCleared: false, remoteAuthorization: .unconfirmed)
+        direct.disconnectResult = failure
+        let manager = ConnectorManager(connectors: [local], directOuraConnector: direct)
+        await manager.deleteLocalData()
+        let localDisconnects = local.disconnectCount
+        let directDisconnects = direct.disconnectCount
+
+        await manager.setOuraConnectionMethod(.direct)
+
+        XCTAssertEqual(manager.ouraConnectionMethod, .appleHealth)
+        XCTAssertEqual(manager.disconnectResults[.oura], failure)
+        XCTAssertEqual(local.disconnectCount, localDisconnects)
+        XCTAssertEqual(direct.disconnectCount, directDisconnects)
+    }
+
+    @MainActor
+    func testMethodSwitchKeepsDirectMethodWhenCurrentAccountCleanupFails() async {
+        setOuraMethod(.direct)
+        let local = MockDashboardConnector(source: .oura)
+        let direct = MockDashboardConnector(source: .oura)
+        let failure = DisconnectResult(localCredentialsCleared: false, remoteAuthorization: .revoked)
+        direct.disconnectResult = failure
+        let manager = ConnectorManager(connectors: [local], directOuraConnector: direct)
+
+        await manager.setOuraConnectionMethod(.appleHealth)
+
+        XCTAssertEqual(manager.ouraConnectionMethod, .direct)
+        XCTAssertEqual(manager.disconnectResults[.oura], failure)
+        XCTAssertEqual(direct.disconnectCount, 1)
+        XCTAssertEqual(local.disconnectCount, 0)
+        XCTAssertEqual(sharedDefaults.string(forKey: "oura.connectionMethod"), OuraConnectionMethod.direct.rawValue)
+    }
+
+    @MainActor
+    func testLocalHealthDisconnectionCannotErasePreviousDirectFailure() async {
+        let local = MockDashboardConnector(source: .oura)
+        let direct = MockDashboardConnector(source: .oura)
+        let failure = DisconnectResult(localCredentialsCleared: false, remoteAuthorization: .unconfirmed)
+        direct.disconnectResult = failure
+        let manager = ConnectorManager(connectors: [local], directOuraConnector: direct)
+        await manager.deleteLocalData()
+
+        await manager.disconnect(.oura)
+
+        XCTAssertEqual(manager.disconnectResults[.oura], failure)
+        XCTAssertEqual(local.disconnectCount, 2)
+        let relaunched = ConnectorManager(connectors: [local], directOuraConnector: direct)
+        XCTAssertEqual(relaunched.disconnectResults[.oura], failure)
+    }
+
+    @MainActor
+    func testLocalHealthReconnectAndDisconnectPreserveUnconfirmedDirectRevocation() async {
+        let local = MockDashboardConnector(source: .oura)
+        let direct = MockDashboardConnector(source: .oura)
+        let unconfirmed = DisconnectResult(localCredentialsCleared: true, remoteAuthorization: .unconfirmed)
+        direct.disconnectResult = unconfirmed
+        let manager = ConnectorManager(connectors: [local], directOuraConnector: direct)
+        await manager.deleteLocalData()
+
+        await manager.connect(.oura)
+        XCTAssertEqual(local.authorizeCount, 1)
+        XCTAssertTrue(manager.connectedSources.contains(.oura))
+        XCTAssertEqual(manager.disconnectResults[.oura], unconfirmed)
+        await manager.disconnect(.oura)
+
+        XCTAssertEqual(manager.disconnectResults[.oura], unconfirmed)
+        let relaunched = ConnectorManager(connectors: [local], directOuraConnector: direct)
+        XCTAssertEqual(relaunched.disconnectResults[.oura], unconfirmed)
+    }
+
+    private var sharedDefaults: UserDefaults {
+        UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard
+    }
+
+    private func clearOuraPreferences() {
+        UserDefaults.standard.removeObject(forKey: "oura.disconnectResult")
+        sharedDefaults.removeObject(forKey: "oura.connectionMethod")
+    }
+
+    private func setOuraMethod(_ method: OuraConnectionMethod) {
+        sharedDefaults.set(method.rawValue, forKey: "oura.connectionMethod")
+    }
+
+    private func privateCalendarMetric() -> DashboardMetric {
+        DashboardMetric(id: "nextEvent", source: .googleCalendar, title: "Up next", value: "Busy",
+                        detail: "10:30", symbol: "calendar", tint: "blue", privateValue: "Private medical appointment")
+    }
 }
 
 @MainActor
 private final class MockDashboardConnector: DashboardConnector {
     let source: DataSource
+    var authorizeCount = 0
     var refreshCount = 0
     var disconnectCount = 0
+    var disconnectResult = DisconnectResult.localOnly
+    var customMetric: DashboardMetric?
     var refreshError: Error?
     var holdAuthorization = false
     var holdRefresh = false
@@ -99,10 +328,11 @@ private final class MockDashboardConnector: DashboardConnector {
 
     init(source: DataSource) { self.source = source }
     var metric: DashboardMetric {
-        DashboardMetric(id: source == .googleCalendar ? "nextEvent" : "steps", source: source,
-                        title: "Test", value: "42", detail: "Live", symbol: "circle", tint: "blue")
+        customMetric ?? DashboardMetric(id: source == .googleCalendar ? "nextEvent" : "steps", source: source,
+                                        title: "Test", value: "42", detail: "Live", symbol: "circle", tint: "blue")
     }
     func authorize() async throws {
+        authorizeCount += 1
         if holdAuthorization {
             await withCheckedContinuation { continuation in
                 authorization = continuation
@@ -112,6 +342,7 @@ private final class MockDashboardConnector: DashboardConnector {
     }
     func refresh() async throws -> [DashboardMetric] {
         refreshCount += 1
+        let snapshot = metric
         if holdRefresh {
             await withCheckedContinuation { continuation in
                 refreshContinuation = continuation
@@ -119,9 +350,12 @@ private final class MockDashboardConnector: DashboardConnector {
             }
         } else { onRefresh?() }
         if let refreshError { throw refreshError }
-        return [metric]
+        return [snapshot]
     }
-    func disconnect() async { disconnectCount += 1 }
+    func disconnect() async -> DisconnectResult {
+        disconnectCount += 1
+        return disconnectResult
+    }
     func resumeAuthorization() { authorization?.resume(); authorization = nil }
     func resumeRefresh() { refreshContinuation?.resume(); refreshContinuation = nil }
 }

@@ -5,14 +5,14 @@ struct WeatherUVWidget: Widget {
     let kind = "PulseboardWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
+        AppIntentConfiguration(kind: kind, intent: HomeWidgetIntent.self, provider: Provider<HomeWidgetIntent>()) { entry in
             PulseboardWidgetView(entry: entry)
                 .containerBackground(for: .widget) {
                     LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
                 }
         }
         .configurationDisplayName("Pulseboard")
-        .description("Health, recovery, and your schedule at a glance.")
+        .description("Health, recovery, and your schedule. Edit each widget to choose its layout, metric, and privacy.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -57,6 +57,7 @@ struct PulseboardWidgetView: View {
                 Label(metric.title, systemImage: metric.symbol).font(.caption.bold()).lineLimit(1)
                 Text(metric.detail).font(.caption2).foregroundStyle(.white.opacity(0.8)).lineLimit(1)
             }
+            .privacySensitive(entry.configuration.privacyMode == .showValues)
         }
     }
 
@@ -66,6 +67,7 @@ struct PulseboardWidgetView: View {
                 metricRow(metric)
             }
         }
+        .privacySensitive(entry.configuration.privacyMode == .showValues)
     }
 
     private var noData: some View {

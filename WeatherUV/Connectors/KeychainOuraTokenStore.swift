@@ -39,7 +39,7 @@ struct OuraKeychainTokenStore: OuraTokenStoring {
         }
         return tokens
 #else
-        return nil
+        throw OuraError.secureStorage
 #endif
     }
 
@@ -71,6 +71,8 @@ struct OuraKeychainTokenStore: OuraTokenStoring {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw OuraError.secureStorage
         }
+#else
+        throw OuraError.secureStorage
 #endif
     }
 

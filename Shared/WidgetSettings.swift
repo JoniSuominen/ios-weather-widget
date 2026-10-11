@@ -24,6 +24,60 @@ enum WidgetLayout: String, CaseIterable, Identifiable {
     }
 }
 
+enum WidgetMetricChoice: String, CaseIterable, Identifiable {
+    case automatic
+    case readiness
+    case sleep
+    case steps
+    case heart
+    case nextEvent
+
+    var id: String { rawValue }
+    var metricID: String { self == .automatic ? "" : rawValue }
+
+    var displayName: String {
+        switch self {
+        case .automatic: return "Automatic"
+        case .readiness: return "Readiness"
+        case .sleep: return "Sleep"
+        case .steps: return "Steps"
+        case .heart: return "Resting heart rate"
+        case .nextEvent: return "Next event"
+        }
+    }
+}
+
+/// A widget's own settings. Installed widgets always receive this value from
+/// their configuration intent, so one widget cannot change another's choices.
+struct WidgetInstanceConfiguration: Equatable {
+    let layout: WidgetLayout
+    let primaryMetricID: String
+    let privacyMode: WidgetPrivacyMode
+
+    init(
+        layout: WidgetLayout = .balance,
+        primaryMetricID: String = "",
+        privacyMode: WidgetPrivacyMode = .discreet
+    ) {
+        self.layout = layout
+        self.primaryMetricID = primaryMetricID
+        self.privacyMode = privacyMode
+    }
+
+    static let homeDefault = WidgetInstanceConfiguration(privacyMode: .showValues)
+    static let lockDefault = WidgetInstanceConfiguration(privacyMode: .discreet)
+
+    func orderedMetrics(_ metrics: [DashboardMetric]) -> [DashboardMetric] {
+        WidgetPreferences.orderedMetrics(metrics, layout: layout, primaryMetricID: primaryMetricID)
+    }
+
+    func renderedMetrics(_ metrics: [DashboardMetric]) -> [DashboardMetric] {
+        orderedMetrics(WidgetPrivacy.render(metrics, mode: privacyMode))
+    }
+}
+
+/// Preferences for the app's widget studio preview. Widget extensions use
+/// WidgetInstanceConfiguration from each widget's intent instead.
 enum WidgetPreferences {
     private static let layoutKey = "widget.layout"
     private static let primaryMetricKey = "widget.primaryMetricID"

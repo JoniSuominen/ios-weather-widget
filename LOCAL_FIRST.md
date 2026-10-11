@@ -17,11 +17,13 @@ In Oura account mode, the app signs in through Oura using OAuth authorization co
 
 ## On-device storage
 
-The shared App Group holds the latest display metrics, source connection state, source freshness, and widget configuration. It does not hold OAuth tokens. Detailed health and calendar history stays in its originating system store or service. Calendar titles shown in a widget are still personal data; users should choose widget placement accordingly.
+The shared App Group holds the latest display metrics, source connection state, source freshness, calendar selection identifiers, and app preview preferences. It does not hold OAuth tokens. EventKit queries only selected calendars, and titles are stored in a separate optional field only after explicit opt-in. Changing selections or disabling titles clears the calendar snapshot; a revision check rejects older in-flight fetches. An upgrade discards legacy calendar snapshots that could contain titles.
+
+Each widget stores its own AppIntent configuration through iOS. The timeline provider projects metrics into display-safe data before rendering: Discreet removes health values, numeric gauges, private titles, and sensitive accessibility content. Lock Screen widgets default to Discreet. Show values opts into private values with iOS privacy redaction. Detailed health and calendar history stays in its originating system store or service.
 
 The app fetches data on launch, foreground activation, manual refresh, and when iOS grants a background refresh opportunity. A background refresh is requested after about 30 minutes, but iOS may delay it or never run it. Widgets render cached data, retain the actual source update time, and identify snapshots at least an hour old as stale. Refreshing a widget timeline alone does not make a cached value fresh.
 
-Disconnect removes a source's local display data and account credentials. Oura account disconnect attempts remote revocation; without network access, local deletion can succeed while remote revocation cannot. **Delete local data** clears Pulseboard's snapshots, configuration, connection state, and credentials. It does not delete records from Apple Health, Calendar, or Oura. Revoke provider permissions in iOS Settings or your Oura account when needed.
+Disconnect removes a source's local display data and stops using its credentials immediately. Oura account disconnect attempts Keychain removal and remote revocation, reporting both results. **Delete local data** clears Pulseboard's snapshots, preview preferences, calendar selections, and connection state, and attempts credential removal. Installed widget settings remain managed by iOS. A nonsecret cleanup result remains in app preferences so failed credential removal is visible after relaunch and can be retried. It does not delete records from Apple Health, Calendar, or Oura. Revoke provider permissions in iOS Settings or your Oura account when needed.
 
 ## Operating commitments
 

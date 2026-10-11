@@ -1,0 +1,65 @@
+name: iPhone Build
+
+on:
+  push:
+    branches: [main, codex/privacy-iphone-testing]
+  workflow_dispatch:
+    inputs:
+      oura_broker_url:
+        description: Public HTTPS Oura broker base URL (optional; Apple Health mode works without it)
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: iphone-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unsigned-archive:
+    name: Build unsigned iPhone app + widget archive
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      OURA_BROKER_URL: ${{ inputs.oura_broker_url || vars.OURA_BROKER_URL || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+
+      - name: Archive iOS device build without signing
+        run: Scripts/archive-iphone.sh
+
+      - name: Upload unsigned device build
+        uses: actions/upload-artifact@v4
+        with:
+          name: pulseboard-iphone-unsigned-${{ github.sha }}
+          path: |
+            build/iphone-artifacts/Pulseboard.xcarchive.zip
+            build/iphone-artifacts/SHA256SUMS
+            build/iphone-artifacts/BUILD_INFO.json
+            build/iphone-artifacts/INSTALLING.md
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Explain installation requirements
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ### Unsigned iPhone build prepared
+
+          The artifact contains an arm64 `.xcarchive` with Pulseboard and its widget,
+          plus a checksum and build metadata. **It cannot be installed until signed.**
+
+          For your own iPhone, use `Scripts/install-on-iphone.sh` on a Mac with your
+          Apple Developer team and trusted phone. See `INSTALLING.md` in the artifact
+          and `DEPLOYMENT.md` in the repository. No signing credentials or provisioning
+          profiles are bundled, and this workflow does not publish to the App Store.
+          SUMMARY

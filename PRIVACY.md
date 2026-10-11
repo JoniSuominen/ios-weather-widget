@@ -1,6 +1,6 @@
 # Pulseboard privacy policy
 
-Updated October 10, 2026.
+Updated October 11, 2026.
 
 Pulseboard displays a personal dashboard and iOS widgets using sources you choose to connect. This policy describes the open-source app and the supplied Oura token broker. A distributor who changes the code or hosting must review and update this policy for their deployment.
 
@@ -9,10 +9,12 @@ Pulseboard displays a personal dashboard and iOS widgets using sources you choos
 With your permission, Pulseboard reads:
 
 - **Apple Health:** today's steps, resting heart rate, and, in Apple Health mode, sleep samples written by Oura. Readiness scores are not available through this fallback.
-- **Calendar:** the next event from calendars configured on your iPhone, including its title and time for display.
+- **Calendar:** availability and timing for the next event from calendars you explicitly select on your iPhone. No calendars are selected automatically. Event titles are cached and displayed only if you enable them in Calendar privacy settings.
 - **Oura account:** readiness and sleep data from Oura's API after you authorize account access.
 
-The latest display values, source state, freshness times, and widget choices are stored in the app's local shared App Group so widgets can display them. Oura account tokens are stored in iOS Keychain, not in the shared widget snapshot. Detailed health and calendar histories are not copied into a Pulseboard user database. Data displayed on a Home or Lock Screen widget may be visible to people who can see your device.
+The latest display values, source state, freshness times, calendar selection identifiers, and preview preferences are stored in the app's local shared App Group so widgets can display them. Oura account tokens are stored in iOS Keychain, not in the shared widget snapshot. Detailed health and calendar histories are not copied into a Pulseboard user database.
+
+Each installed widget has separate settings managed by iOS. Lock Screen widgets default to Discreet, concealing health measurements and event titles from text, gauges, and accessibility labels. Show values marks private values for iOS privacy redaction; values may be visible to anyone who can see your device when iOS permits their display. Calendar titles additionally require the app's title opt-in. Widget refresh timing is controlled by iOS, so already displayed snapshots may remain briefly after settings change or data deletion.
 
 Pulseboard does not include advertising, analytics, tracking, or a third-party crash-reporting SDK. It does not sell personal data.
 
@@ -28,9 +30,9 @@ Oura and Apple have separate privacy policies governing their services: [Oura pr
 
 ## Your choices and deletion
 
-Connecting a source is optional. You can use Apple Health mode instead of direct Oura account access. You can disconnect individual sources or use **Delete local data** in Sources to clear Pulseboard's cached values, source state, widget choices, and account credentials. Deletion does not remove records from Apple Health, your calendars, or your Oura account.
+Connecting a source is optional. You can use Apple Health mode instead of direct Oura account access. You can disconnect individual sources or use **Delete local data** in Sources to clear Pulseboard's cached values, source state, calendar selections, and preview preferences, and attempt removal of account credentials. Installed widget settings remain managed by iOS. Deletion does not remove records from Apple Health, your calendars, or your Oura account.
 
-Oura disconnect attempts to revoke remote access. A network or provider failure may prevent remote revocation even though local credentials are removed. Review authorized applications in your Oura account to revoke access there. Manage Apple Health and Calendar permissions in iOS Settings. iOS device backup behavior depends on system settings.
+Oura disconnect reports local credential removal and remote revocation separately. A network or provider failure may prevent remote revocation even though local credentials are removed; Keychain removal can also fail. Pulseboard stops using the connection immediately and offers a retry when local removal fails. A nonsecret cleanup status is retained in app preferences after deletion and relaunch so an unresolved failure remains visible; it contains no tokens or account identifiers. Review authorized applications in your Oura account to revoke access there. Manage Apple Health and Calendar permissions in iOS Settings. iOS device backup behavior depends on system settings.
 
 ## Contact and changes
 

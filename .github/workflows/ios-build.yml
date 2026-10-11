@@ -48,7 +48,7 @@ jobs:
           xcodebuild build \
             -project WeatherUV.xcodeproj \
             -scheme WeatherUV \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "id=$SIMULATOR_ID" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""

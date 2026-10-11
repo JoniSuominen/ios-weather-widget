@@ -3,13 +3,14 @@ import WidgetKit
 struct DashboardEntry: TimelineEntry {
     let date: Date
     let metrics: [DashboardMetric]
-    let layout: WidgetLayout
-    let primaryMetricID: String
+    let configuration: WidgetInstanceConfiguration
     let updatedAtBySource: [DataSource: Date]
     let errorsBySource: [DataSource: String]
 
+    var layout: WidgetLayout { configuration.layout }
+
     var orderedMetrics: [DashboardMetric] {
-        WidgetPreferences.orderedMetrics(metrics, layout: layout, primaryMetricID: primaryMetricID)
+        configuration.orderedMetrics(metrics)
     }
 
     func freshness(for displayedMetrics: [DashboardMetric]) -> DashboardFreshness {
@@ -20,7 +21,7 @@ struct DashboardEntry: TimelineEntry {
         )
     }
 
-    static func cached(at date: Date) -> DashboardEntry {
+    static func cached(at date: Date, configuration: WidgetInstanceConfiguration) -> DashboardEntry {
         var updates: [DataSource: Date] = [:]
         var errors: [DataSource: String] = [:]
         for source in DataSource.allCases {
@@ -29,20 +30,18 @@ struct DashboardEntry: TimelineEntry {
         }
         return DashboardEntry(
             date: date,
-            metrics: DashboardStore.metrics,
-            layout: WidgetPreferences.layout,
-            primaryMetricID: WidgetPreferences.primaryMetricID,
+            metrics: configuration.renderedMetrics(DashboardStore.metrics),
+            configuration: configuration,
             updatedAtBySource: updates,
             errorsBySource: errors
         )
     }
 
-    static func preview(at date: Date = .now) -> DashboardEntry {
+    static func preview(at date: Date = .now, configuration: WidgetInstanceConfiguration) -> DashboardEntry {
         DashboardEntry(
             date: date,
-            metrics: DashboardMetric.defaults,
-            layout: .balance,
-            primaryMetricID: "",
+            metrics: configuration.renderedMetrics(DashboardMetric.defaults),
+            configuration: configuration,
             updatedAtBySource: Dictionary(uniqueKeysWithValues: DataSource.allCases.map { ($0, date) }),
             errorsBySource: [:]
         )
@@ -52,26 +51,29 @@ struct DashboardEntry: TimelineEntry {
         DashboardEntry(
             date: date,
             metrics: metrics,
-            layout: layout,
-            primaryMetricID: primaryMetricID,
+            configuration: configuration,
             updatedAtBySource: updatedAtBySource,
             errorsBySource: errorsBySource
         )
     }
 }
 
-struct Provider: TimelineProvider {
+struct Provider<Configuration: PulseboardWidgetIntent>: AppIntentTimelineProvider {
+    typealias Intent = Configuration
+
     func placeholder(in context: Context) -> DashboardEntry {
-        .preview()
+        .preview(configuration: Configuration.defaultConfiguration)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (DashboardEntry) -> Void) {
-        completion(context.isPreview ? .preview() : .cached(at: .now))
+    func snapshot(for configuration: Configuration, in context: Context) async -> DashboardEntry {
+        context.isPreview
+            ? .preview(configuration: configuration.instanceConfiguration)
+            : .cached(at: .now, configuration: configuration.instanceConfiguration)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<DashboardEntry>) -> Void) {
+    func timeline(for configuration: Configuration, in context: Context) async -> Timeline<DashboardEntry> {
         let now = Date.now
-        let entry = DashboardEntry.cached(at: now)
+        let entry = DashboardEntry.cached(at: now, configuration: configuration.instanceConfiguration)
         let rereadAt = now.addingTimeInterval(30 * 60)
         // WidgetKit rereads the shared cache; it does not fetch source data.
         // Schedule the stale boundary so a previously fresh widget visibly
@@ -80,6 +82,6 @@ struct Provider: TimelineProvider {
             $0.addingTimeInterval(DashboardFreshness.staleInterval)
         }).filter { $0 > now && $0 <= rereadAt }.sorted()
         let entries = [entry] + boundaries.map { entry.scheduled(at: $0) }
-        completion(Timeline(entries: entries, policy: .after(rereadAt)))
+        return Timeline(entries: entries, policy: .after(rereadAt))
     }
 }

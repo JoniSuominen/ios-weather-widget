@@ -37,6 +37,11 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
     let numericValue: Double?
     let targetValue: Double?
     let observedAt: Date?
+    /// Calendar title kept only when the user explicitly enables titles.
+    /// Widget privacy projection must remove it before rendering a discreet widget.
+    let privateValue: String?
+
+    var displayValue: String { privateValue ?? value }
 
     init(
         id: String,
@@ -48,7 +53,8 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         tint: String,
         numericValue: Double? = nil,
         targetValue: Double? = nil,
-        observedAt: Date? = nil
+        observedAt: Date? = nil,
+        privateValue: String? = nil
     ) {
         self.id = id
         self.source = source
@@ -60,6 +66,7 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         self.numericValue = numericValue
         self.targetValue = targetValue
         self.observedAt = observedAt
+        self.privateValue = privateValue
     }
 
     /// A normalized, finite goal or score. Metrics without a meaningful target
@@ -88,6 +95,7 @@ enum DashboardStore {
     private static let updatedAtKey = "dashboard.updatedAt"
     private static let sourceUpdatesKey = "dashboard.sourceUpdates"
     private static let sourceErrorsKey = "dashboard.sourceErrors"
+    private static let privacyVersionKey = "dashboard.privacyVersion"
 
     private static var defaults: UserDefaults {
         UserDefaults(suiteName: appGroupID) ?? .standard
@@ -95,6 +103,7 @@ enum DashboardStore {
 
     static var metrics: [DashboardMetric] {
         get {
+            migratePrivacyIfNeeded()
             guard let data = defaults.data(forKey: metricsKey),
                   let metrics = try? JSONDecoder().decode([DashboardMetric].self, from: data) else {
                 return []
@@ -168,7 +177,32 @@ enum DashboardStore {
         defaults.removeObject(forKey: updatedAtKey)
         defaults.removeObject(forKey: sourceUpdatesKey)
         defaults.removeObject(forKey: sourceErrorsKey)
+        CalendarPreferences.reset()
         WidgetPreferences.reset()
+        defaults.set(1, forKey: privacyVersionKey)
+    }
+
+    /// An older snapshot can contain event titles copied before calendar privacy
+    /// controls existed. Discard that source before the app or widget can display it.
+    static func migratePrivacyIfNeeded() {
+        guard defaults.integer(forKey: privacyVersionKey) < 1 else { return }
+        if let data = defaults.data(forKey: metricsKey),
+           let oldMetrics = try? JSONDecoder().decode([DashboardMetric].self, from: data) {
+            let safeMetrics = oldMetrics.filter { $0.source != .googleCalendar }
+            defaults.set(try? JSONEncoder().encode(safeMetrics), forKey: metricsKey)
+        }
+        var updates = defaults.dictionary(forKey: sourceUpdatesKey) ?? [:]
+        updates.removeValue(forKey: DataSource.googleCalendar.rawValue)
+        defaults.set(updates, forKey: sourceUpdatesKey)
+        var errors = defaults.dictionary(forKey: sourceErrorsKey) ?? [:]
+        errors.removeValue(forKey: DataSource.googleCalendar.rawValue)
+        defaults.set(errors, forKey: sourceErrorsKey)
+        let remainingDates = updates.values.compactMap { $0 as? Date }
+        if let latest = remainingDates.max() { defaults.set(latest, forKey: updatedAtKey) }
+        else { defaults.removeObject(forKey: updatedAtKey) }
+        // App and widget can migrate concurrently. Publish completion only once
+        // the legacy private calendar snapshot and metadata have been removed.
+        defaults.set(1, forKey: privacyVersionKey)
     }
 
     private static func clearError(for source: DataSource) {

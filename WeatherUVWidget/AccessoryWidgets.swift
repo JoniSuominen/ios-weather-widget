@@ -4,11 +4,13 @@ import SwiftUI
 struct WeatherUVAccessoryWidget: Widget {
     let kind = "PulseboardAccessoryWidget"
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            AccessoryView(entry: entry).containerBackground(for: .widget) { Color.clear }
+        AppIntentConfiguration(kind: kind, intent: LockWidgetIntent.self, provider: Provider<LockWidgetIntent>()) { entry in
+            AccessoryView(entry: entry)
+                .privacySensitive(entry.configuration.privacyMode == .showValues)
+                .containerBackground(for: .widget) { Color.clear }
         }
         .configurationDisplayName("Pulseboard glance")
-        .description("A selected metric and your next event.")
+        .description("Discreet by default. Edit this widget to choose its metric and opt in to showing private values.")
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

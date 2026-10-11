@@ -20,6 +20,20 @@ The app and widget source are included. A signed release still needs an Apple De
 
 `project.yml` is the project source of truth. Regenerate after editing it; generated Xcode settings may be overwritten. Simulator builds do not require a signing team. The repository's **iOS Build** GitHub Actions workflow validates the app and widget; inspect that run's actual result before treating a commit as verified. CI compilation does not validate physical-device permissions, OAuth configuration, or delivery through TestFlight.
 
+## Download the iPhone device build
+
+The **iPhone Build** workflow archives the app and widget for a real arm64 iPhone on GitHub's macOS runner. It runs on pushes to `main`, the device-testing branch, and from **Actions → iPhone Build → Run workflow**. A manual run can include an optional public HTTPS Oura broker URL; the repository variable `OURA_BROKER_URL` is used if that input is empty. The workflow does not need Apple signing secrets.
+
+After the workflow succeeds, download `pulseboard-iphone-unsigned-<commit SHA>` from its **Artifacts** section. It contains `Pulseboard.xcarchive.zip`, `BUILD_INFO.json`, `SHA256SUMS`, and `INSTALLING.md`. Verify it on a Mac:
+
+```bash
+shasum -a 256 -c SHA256SUMS
+unzip Pulseboard.xcarchive.zip
+open Pulseboard.xcarchive
+```
+
+The archive opens in Xcode Organizer for inspection. It is **unsigned and cannot be installed on your iPhone** until Apple signing and provisioning are supplied. AirDrop and the iPhone Files app do not install this artifact. For a reliable local installation, check out the source commit listed in `BUILD_INFO.json` and use the signed build script below. If you already have a Mac, `Scripts/archive-iphone.sh` produces the same unsigned package under `build/iphone-artifacts`.
+
 ## Configure the Oura account integration
 
 Apple Health mode can read Oura sleep shared by the Oura app without a broker. For Oura account mode and Readiness scores:
@@ -54,6 +68,19 @@ Register them under the Apple Developer team that will distribute the app. Enabl
 3. Connect and trust the iPhone, enable Developer Mode if requested, select it as the run destination, and press **⌘R**.
 4. Launch Pulseboard once before adding widgets. Add your Google account to iOS Calendar if you want its events to appear; Pulseboard uses EventKit rather than Google sign-in.
 
+### Build and install from Terminal
+
+After adding the Apple account in Xcode and connecting the phone, run:
+
+```bash
+Scripts/install-on-iphone.sh --list
+Scripts/install-on-iphone.sh --team YOUR_TEAM_ID --device YOUR_IPHONE_UDID
+```
+
+Use the physical iPhone ID shown under **Available destinations**, not a simulator ID. Find your ten-character Team ID in the Apple Developer account membership details. The script regenerates the Xcode project, builds with automatic signing, lets Xcode register the device if needed, verifies the app signature, installs the app with its embedded widget, and launches it. Signing credentials remain managed by Xcode on your Mac.
+
+For direct Oura access, append `--broker-url https://your-deployed-broker` or set the public `OURA_BROKER_URL` environment variable before running the script. Without broker configuration, select Apple Health mode. If provisioning fails, open Xcode and resolve the Team/App Group/HealthKit configuration for both targets before retrying.
+
 A free Personal Team may have capability or provisioning limits. App Groups, release signing, and TestFlight should be verified with the distributing Apple Developer Program team.
 
 ## Physical-device acceptance checklist
@@ -80,7 +107,7 @@ These checks require execution on a real iPhone; their presence here does not me
 4. Select **Any iOS Device (arm64)**, then **Product → Archive**. In Organizer choose **Distribute App → App Store Connect → Upload**.
 5. After processing, add TestFlight internal testers. External testers require Apple's beta review. Submit for App Store review only after the release checks pass.
 
-The supplied CI workflow does not upload a signed release or contain certificates, provisioning profiles, or App Store Connect credentials. Keep these secrets out of Git.
+The supplied workflows build simulator checks and an unsigned device archive. They do not upload a signed release or contain certificates, provisioning profiles, or App Store Connect credentials. Keep these secrets out of Git. A TestFlight or ad-hoc IPA requires a signed archive and the appropriate Apple Developer distribution configuration; create and export it through Xcode Organizer.
 
 ## Troubleshooting
 

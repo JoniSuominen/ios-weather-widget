@@ -138,19 +138,47 @@ final class OuraAPIConnector: DashboardConnector {
         return Self.dashboardMetrics(readiness: records.0, dailySleep: records.1, sleep: records.2)
     }
 
-    func disconnect() async {
-        let oldToken = (try? loadTokens())?.accessToken
+    func disconnect() async -> DisconnectResult {
+        let rememberedAccessToken = tokens?.accessToken
         generation += 1
         refreshTask?.cancel()
         refreshTask = nil
         tokens = nil
         didLoadTokens = true
-        try? tokenStorage.delete()
-        await authenticator.cancel()
-        // Local disconnection always succeeds, including when the device is offline.
-        if let oldToken, configuration.isConfigured {
-            _ = try? await brokerRequest("oauth/revoke", body: ["access_token": oldToken], allowEmpty: true)
+
+        // Read only for this revocation attempt; never retain a token to retry later.
+        let oldToken: String?
+        var credentialsReadFailed = false
+        do {
+            oldToken = try tokenStorage.load()?.accessToken ?? rememberedAccessToken
+        } catch {
+            oldToken = rememberedAccessToken
+            credentialsReadFailed = true
         }
+        let localCredentialsCleared: Bool
+        do {
+            try tokenStorage.delete()
+            localCredentialsCleared = true
+        } catch {
+            localCredentialsCleared = false
+        }
+        await authenticator.cancel()
+
+        let remoteAuthorization: DisconnectResult.RemoteAuthorization
+        if let oldToken, configuration.isConfigured {
+            do {
+                _ = try await brokerRequest("oauth/revoke", body: ["access_token": oldToken], allowEmpty: true)
+                remoteAuthorization = .revoked
+            } catch {
+                remoteAuthorization = .unconfirmed
+            }
+        } else if oldToken != nil || credentialsReadFailed {
+            remoteAuthorization = .unconfirmed
+        } else {
+            remoteAuthorization = .noStoredCredentials
+        }
+        return DisconnectResult(localCredentialsCleared: localCredentialsCleared,
+                                remoteAuthorization: remoteAuthorization)
     }
 
     private func checkOperation(_ operation: Int) throws {
@@ -248,7 +276,11 @@ final class OuraAPIConnector: DashboardConnector {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        return try await send(request, allowEmpty: allowEmpty, isTokenRequest: !allowEmpty).0
+        let response = try await send(request, allowEmpty: allowEmpty, isTokenRequest: !allowEmpty)
+        if allowEmpty && response.1.statusCode != 204 {
+            throw OuraError.invalidResponse
+        }
+        return response.0
     }
 
     private func send(_ original: URLRequest, allowEmpty: Bool = false,

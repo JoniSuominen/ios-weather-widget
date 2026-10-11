@@ -6,10 +6,12 @@ final class WidgetDataTests: XCTestCase {
     override func setUp() {
         super.setUp()
         DashboardStore.deleteLocalData()
+        clearOuraPreferences()
     }
 
     override func tearDown() {
         DashboardStore.deleteLocalData()
+        clearOuraPreferences()
         super.tearDown()
     }
 
@@ -22,7 +24,64 @@ final class WidgetDataTests: XCTestCase {
         XCTAssertNil(metrics.first?.numericValue)
         XCTAssertNil(metrics.first?.targetValue)
         XCTAssertNil(metrics.first?.observedAt)
+        XCTAssertNil(metrics.first?.privateValue)
         XCTAssertNil(metrics.first?.gaugeProgress)
+    }
+
+    func testLegacyCalendarPrivacyMigrationPreservesHealthDataAndItsFetchState() throws {
+        let defaults = UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard
+        let healthFetch = Date(timeIntervalSince1970: 1000)
+        let calendarFetch = Date(timeIntervalSince1970: 2000)
+        let json = """
+        [{"id":"steps","source":"Apple Health","title":"Steps","value":"42","detail":"Today","symbol":"figure.walk","tint":"mint"},
+         {"id":"nextEvent","source":"Google Calendar","title":"Up next","value":"Confidential appointment","detail":"10:30","symbol":"calendar","tint":"blue"}]
+        """
+        defaults.set(Data(json.utf8), forKey: "dashboard.metrics")
+        defaults.set([DataSource.appleHealth.rawValue: healthFetch, DataSource.googleCalendar.rawValue: calendarFetch], forKey: "dashboard.sourceUpdates")
+        defaults.set([DataSource.appleHealth.rawValue: "Health unavailable", DataSource.googleCalendar.rawValue: "Calendar unavailable"], forKey: "dashboard.sourceErrors")
+        defaults.set(calendarFetch, forKey: "dashboard.updatedAt")
+        defaults.removeObject(forKey: "dashboard.privacyVersion")
+
+        let migrated = DashboardStore.metrics
+
+        XCTAssertEqual(migrated.map(\.id), ["steps"])
+        XCTAssertEqual(migrated.first?.value, "42")
+        XCTAssertEqual(DashboardStore.updatedAt(for: .appleHealth), healthFetch)
+        XCTAssertEqual(DashboardStore.updatedAt, healthFetch)
+        XCTAssertEqual(DashboardStore.error(for: .appleHealth), "Health unavailable")
+        XCTAssertNil(DashboardStore.updatedAt(for: .googleCalendar))
+        XCTAssertNil(DashboardStore.error(for: .googleCalendar))
+        let savedData = try XCTUnwrap(defaults.data(forKey: "dashboard.metrics"))
+        XCTAssertFalse(String(decoding: savedData, as: UTF8.self).contains("Confidential appointment"))
+
+        // The migration is one-time: new titles explicitly opted into under the
+        // new schema must not disappear on the next widget or app cache read.
+        CalendarPreferences.showEventTitles = true
+        let allowedEvent = DashboardMetric(id: "nextEvent", source: .googleCalendar, title: "Up next", value: "Busy",
+                                          detail: "10:30", symbol: "calendar", tint: "blue", privateValue: "Allowed title")
+        DashboardStore.replaceMetrics([allowedEvent], for: .googleCalendar)
+        XCTAssertTrue(DashboardStore.metrics.contains(allowedEvent))
+        XCTAssertEqual(DashboardStore.error(for: .appleHealth), "Health unavailable")
+    }
+
+    func testLegacyCalendarOnlyMigrationClearsGlobalFreshness() throws {
+        let defaults = UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard
+        let calendarFetch = Date(timeIntervalSince1970: 2000)
+        let json = """
+        [{"id":"nextEvent","source":"Google Calendar","title":"Up next","value":"Private appointment","detail":"10:30","symbol":"calendar","tint":"blue"}]
+        """
+        defaults.set(Data(json.utf8), forKey: "dashboard.metrics")
+        defaults.set([DataSource.googleCalendar.rawValue: calendarFetch], forKey: "dashboard.sourceUpdates")
+        defaults.set([DataSource.googleCalendar.rawValue: "Permission revoked"], forKey: "dashboard.sourceErrors")
+        defaults.set(calendarFetch, forKey: "dashboard.updatedAt")
+        defaults.removeObject(forKey: "dashboard.privacyVersion")
+
+        XCTAssertTrue(DashboardStore.metrics.isEmpty)
+        XCTAssertNil(DashboardStore.updatedAt)
+        XCTAssertNil(DashboardStore.updatedAt(for: .googleCalendar))
+        XCTAssertNil(DashboardStore.error(for: .googleCalendar))
+        let savedData = try XCTUnwrap(defaults.data(forKey: "dashboard.metrics"))
+        XCTAssertFalse(String(decoding: savedData, as: UTF8.self).contains("Private appointment"))
     }
 
     func testNewInstallDoesNotShowSampleMetrics() {
@@ -146,6 +205,11 @@ final class WidgetDataTests: XCTestCase {
         XCTAssertNil(DashboardStore.error(for: .appleHealth))
         XCTAssertEqual(WidgetPreferences.layout, .balance)
         XCTAssertEqual(WidgetPreferences.primaryMetricID, "")
+    }
+
+    private func clearOuraPreferences() {
+        UserDefaults.standard.removeObject(forKey: "oura.disconnectResult")
+        (UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard).removeObject(forKey: "oura.connectionMethod")
     }
 
     private func metric(

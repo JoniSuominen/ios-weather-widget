@@ -46,8 +46,9 @@ final class OuraHealthConnector: DashboardConnector {
         return [sleepMetric]
     }
 
-    func disconnect() async {
+    func disconnect() async -> DisconnectResult {
         // This connector stores no token or provider account state.
+        return .localOnly
     }
 
     private static var sleepType: HKCategoryType? {

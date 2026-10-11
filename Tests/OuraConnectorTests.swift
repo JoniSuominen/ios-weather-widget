@@ -189,9 +189,12 @@ final class OuraConnectorTests: XCTestCase {
                                                            expiresAt: date.addingTimeInterval(3_600), scope: "daily"))
         let auth = OuraMockAuthenticator()
         let connector = makeConnector(store: store, authenticator: auth) { _ in (503, #"{"error":"service_unavailable"}"#) }
-        await connector.disconnect()
+        let result = await connector.disconnect()
         XCTAssertNil(store.tokens)
         XCTAssertEqual(auth.cancelCount, 1)
+        XCTAssertTrue(result.localCredentialsCleared)
+        XCTAssertEqual(result.remoteAuthorization, .unconfirmed)
+        XCTAssertNotNil(result.warningMessage)
     }
 
     func testMissingConfigurationFailsBeforeAnyRequest() async {
@@ -252,16 +255,30 @@ final class OuraConnectorTests: XCTestCase {
     }
 }
 
-private final class OuraMemoryTokenStore: OuraTokenStoring {
+final class OuraMemoryTokenStore: OuraTokenStoring {
     var tokens: OuraTokens?
+    var loadError: Error?
+    var deleteError: Error?
+    private(set) var saveCount = 0
+    private(set) var deleteCount = 0
     init(tokens: OuraTokens? = nil) { self.tokens = tokens }
-    func load() throws -> OuraTokens? { tokens }
-    func save(_ tokens: OuraTokens) throws { self.tokens = tokens }
-    func delete() throws { tokens = nil }
+    func load() throws -> OuraTokens? {
+        if let loadError { throw loadError }
+        return tokens
+    }
+    func save(_ tokens: OuraTokens) throws {
+        saveCount += 1
+        self.tokens = tokens
+    }
+    func delete() throws {
+        deleteCount += 1
+        if let deleteError { throw deleteError }
+        tokens = nil
+    }
 }
 
 @MainActor
-private final class OuraMockAuthenticator: OuraAuthenticating {
+final class OuraMockAuthenticator: OuraAuthenticating {
     private(set) var cancelCount = 0
     func authenticate(configuration: OuraPublicConfiguration) async throws -> OuraAuthorizationGrant {
         OuraAuthorizationGrant(code: "provider-code", codeVerifier: String(repeating: "a", count: 43))
@@ -269,7 +286,7 @@ private final class OuraMockAuthenticator: OuraAuthenticating {
     func cancel() async { cancelCount += 1 }
 }
 
-private final class OuraRequestLog {
+final class OuraRequestLog {
     private let lock = NSLock()
     private var values: [URLRequest] = []
     var requests: [URLRequest] {
@@ -284,7 +301,7 @@ private final class OuraRequestLog {
     }
 }
 
-private final class OuraTestURLProtocol: URLProtocol {
+final class OuraTestURLProtocol: URLProtocol {
     private static let lock = NSLock()
     private static var handler: ((URLRequest) throws -> (Int, String))?
 

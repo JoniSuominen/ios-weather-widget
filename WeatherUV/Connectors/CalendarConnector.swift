@@ -13,51 +13,73 @@ final class CalendarConnector: DashboardConnector {
     func authorize() async throws {
         let granted = try await eventStore.requestFullAccessToEvents()
         guard granted else {
+            CalendarPreferences.invalidateSnapshot()
             throw ConnectorError.authorizationDenied("Calendar access was not granted.")
         }
     }
 
+    @discardableResult
+    func clearSnapshotIfAccessUnavailable() -> Bool {
+        guard EKEventStore.authorizationStatus(for: .event) != .fullAccess else { return false }
+        guard DashboardStore.metrics.contains(where: { $0.source == .googleCalendar }) else { return false }
+        CalendarPreferences.invalidateSnapshot()
+        return true
+    }
+
     func refresh() async throws -> [DashboardMetric] {
         guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else {
+            CalendarPreferences.invalidateSnapshot()
             throw ConnectorError.authorizationDenied("Allow full calendar access in Settings to refresh events.")
         }
 
-        let end = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
-        let predicate = eventStore.predicateForEvents(withStart: .now, end: end, calendars: nil)
-        let nextEvent = eventStore.events(matching: predicate)
-            .filter { !$0.isAllDay && $0.endDate > .now }
-            .sorted { $0.startDate < $1.startDate }
-            .first
+        let selectedIDs = CalendarPreferences.selectedCalendarIDs
+        guard !selectedIDs.isEmpty else {
+            return [CalendarSnapshotBuilder.metric(
+                for: nil,
+                showEventTitles: false,
+                emptyDetail: "Choose calendars in Sources"
+            )]
+        }
+        let availableCalendars = eventStore.calendars(for: .event)
+        let availableSelectedIDs = CalendarSnapshotBuilder.selectedIDs(
+            availableIDs: availableCalendars.map(\.calendarIdentifier),
+            selection: selectedIDs
+        )
+        let calendars = availableCalendars.filter { availableSelectedIDs.contains($0.calendarIdentifier) }
+        guard !calendars.isEmpty else {
+            return [CalendarSnapshotBuilder.metric(
+                for: nil,
+                showEventTitles: false,
+                emptyDetail: "Selected calendars are unavailable"
+            )]
+        }
 
-        return [DashboardMetric(
-            id: "nextEvent",
-            source: .googleCalendar,
-            title: "Up next",
-            value: nextEvent?.title.nilIfBlank ?? "No upcoming events",
-            detail: nextEvent.map(Self.eventDetail) ?? "Next 7 days",
-            symbol: "calendar",
-            tint: "blue",
-            observedAt: nextEvent?.startDate
+        let now = Date.now
+        let end = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
+        // Never pass nil: EventKit interprets that as every available calendar.
+        let predicate = eventStore.predicateForEvents(withStart: now, end: end, calendars: calendars)
+        let events = eventStore.events(matching: predicate).map {
+            CalendarEventSummary(
+                calendarID: $0.calendar.calendarIdentifier,
+                title: $0.title,
+                startsAt: $0.startDate,
+                endsAt: $0.endDate,
+                isAllDay: $0.isAllDay
+            )
+        }
+        let nextEvent = CalendarSnapshotBuilder.nextEvent(
+            in: events,
+            selectedCalendarIDs: selectedIDs,
+            now: now
+        )
+        return [CalendarSnapshotBuilder.metric(
+            for: nextEvent,
+            showEventTitles: CalendarPreferences.showEventTitles
         )]
     }
 
-    func disconnect() async {
+    func disconnect() async -> DisconnectResult {
         // EventKit has no per-app revocation API. Users revoke access in Settings.
-    }
-
-    private static func eventDetail(_ event: EKEvent) -> String {
-        let time = event.startDate.formatted(date: .omitted, time: .shortened)
-        let relative = event.startDate.formatted(.relative(presentation: .numeric))
-        return "\(time) · \(relative)"
-    }
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else {
-            return nil
-        }
-        return value
+        return .localOnly
     }
 }
