@@ -63,8 +63,8 @@ xcodebuild "${BUILD_ARGS[@]}"
 APP_PATH="$ARCHIVE_PATH/Products/Applications/Pulseboard.app"
 WIDGET_PATH="$APP_PATH/PlugIns/WeatherUVWidget.appex"
 [[ -d "$APP_PATH" && -d "$WIDGET_PATH" ]] || { printf 'Archive is missing the app or widget extension.\n' >&2; exit 1; }
-xcrun lipo -verify_arch arm64 "$APP_PATH/Pulseboard"
-xcrun lipo -verify_arch arm64 "$WIDGET_PATH/WeatherUVWidget"
+xcrun lipo "$APP_PATH/Pulseboard" -verify_arch arm64
+xcrun lipo "$WIDGET_PATH/WeatherUVWidget" -verify_arch arm64
 ditto -c -k --sequesterRsrc --keepParent "$ARCHIVE_PATH" "$OUTPUT_DIR/Pulseboard.xcarchive.zip"
 (
   cd "$OUTPUT_DIR"
