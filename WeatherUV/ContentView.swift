@@ -201,7 +201,12 @@ private struct SourcesView: View {
             .sheet(item: $pendingSource) { source in
                 PermissionPrimer(source: source, ouraMethod: connectorManager.ouraConnectionMethod) {
                     pendingSource = nil
-                    Task { await connectorManager.connect(source) }
+                    Task {
+                        // The primer sheet is still animating away; iOS cannot present
+                        // the HealthKit permission sheet over it, so the request would hang.
+                        try? await Task.sleep(for: .milliseconds(700))
+                        await connectorManager.connect(source)
+                    }
                 } chooseCity: {
                     pendingSource = nil
                     showingLocationPicker = true
