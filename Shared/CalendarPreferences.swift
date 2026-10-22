@@ -92,9 +92,8 @@ enum CalendarSnapshotBuilder {
         let privateTitle = showEventTitles && eventTitle?.isEmpty == false ? eventTitle : nil
         let detail: String
         if let event {
-            let time = event.startsAt.formatted(date: .omitted, time: .shortened)
-            let relative = event.startsAt.formatted(.relative(presentation: .numeric))
-            detail = "\(time) · \(relative)"
+            // Countdowns are computed when drawn; a stored "in 24 min" would go stale.
+            detail = EventTiming.startText(event.startsAt, now: .now)
         } else {
             detail = emptyDetail
         }
@@ -107,7 +106,8 @@ enum CalendarSnapshotBuilder {
             symbol: "calendar",
             tint: "blue",
             observedAt: event?.startsAt,
-            privateValue: privateTitle
+            privateValue: privateTitle,
+            endsAt: event?.endsAt
         )
     }
 }

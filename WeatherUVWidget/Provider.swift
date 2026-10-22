@@ -1,27 +1,50 @@
 import WidgetKit
 
+extension WidgetCanvas {
+    init?(family: WidgetFamily) {
+        switch family {
+        case .systemSmall: self = .small
+        case .systemMedium: self = .medium
+        case .systemLarge, .systemExtraLarge: self = .large
+        default: return nil
+        }
+    }
+}
+
 struct DashboardEntry: TimelineEntry {
     let date: Date
+    /// Privacy-rendered metrics for this widget's privacy mode.
     let metrics: [DashboardMetric]
     let configuration: WidgetInstanceConfiguration
+    /// The tile layout for Home Screen widgets; nil for Lock Screen widgets.
+    let design: WidgetDesign?
+    let connectedSources: Set<DataSource>
     let updatedAtBySource: [DataSource: Date]
     let errorsBySource: [DataSource: String]
-
-    var layout: WidgetLayout { configuration.layout }
 
     var orderedMetrics: [DashboardMetric] {
         configuration.orderedMetrics(metrics)
     }
 
-    func freshness(for displayedMetrics: [DashboardMetric]) -> DashboardFreshness {
-        DashboardFreshness(
-            metrics: displayedMetrics,
-            updatedAtBySource: updatedAtBySource,
-            errorsBySource: errorsBySource
-        )
+    /// Metrics this widget actually draws; freshness covers only these.
+    var displayedMetrics: [DashboardMetric] {
+        if let design {
+            let ids = Set(design.tiles.map(\.metricID))
+            return metrics.filter { ids.contains($0.id) }
+        }
+        let ordered = orderedMetrics
+        guard let primary = ordered.first else { return [] }
+        if primary.id != "nextEvent", let event = ordered.first(where: { $0.id == "nextEvent" }) {
+            return [primary, event]
+        }
+        return [primary]
     }
 
-    static func cached(at date: Date, configuration: WidgetInstanceConfiguration) -> DashboardEntry {
+    var freshness: DashboardFreshness {
+        DashboardFreshness(metrics: displayedMetrics, updatedAtBySource: updatedAtBySource, errorsBySource: errorsBySource)
+    }
+
+    static func cached(at date: Date, configuration: WidgetInstanceConfiguration, family: WidgetFamily) -> DashboardEntry {
         var updates: [DataSource: Date] = [:]
         var errors: [DataSource: String] = [:]
         for source in DataSource.allCases {
@@ -32,16 +55,20 @@ struct DashboardEntry: TimelineEntry {
             date: date,
             metrics: configuration.renderedMetrics(DashboardStore.metrics),
             configuration: configuration,
+            design: WidgetCanvas(family: family).map { WidgetDesignStore.resolvedDesign(id: configuration.designID, for: $0) },
+            connectedSources: DashboardStore.connectedSources,
             updatedAtBySource: updates,
             errorsBySource: errors
         )
     }
 
-    static func preview(at date: Date = .now, configuration: WidgetInstanceConfiguration) -> DashboardEntry {
+    static func preview(at date: Date = .now, configuration: WidgetInstanceConfiguration, family: WidgetFamily) -> DashboardEntry {
         DashboardEntry(
             date: date,
             metrics: configuration.renderedMetrics(DashboardMetric.defaults),
             configuration: configuration,
+            design: WidgetCanvas(family: family).map { WidgetDesignStore.resolvedDesign(id: configuration.designID, for: $0) },
+            connectedSources: Set(DataSource.allCases),
             updatedAtBySource: Dictionary(uniqueKeysWithValues: DataSource.allCases.map { ($0, date) }),
             errorsBySource: [:]
         )
@@ -52,36 +79,53 @@ struct DashboardEntry: TimelineEntry {
             date: date,
             metrics: metrics,
             configuration: configuration,
+            design: design,
+            connectedSources: connectedSources,
             updatedAtBySource: updatedAtBySource,
             errorsBySource: errorsBySource
         )
     }
 }
 
-struct Provider<Configuration: PulseboardWidgetIntent>: AppIntentTimelineProvider {
+struct Provider<Configuration: DashboardWidgetIntent>: AppIntentTimelineProvider {
     typealias Intent = Configuration
 
+    static var reloadInterval: TimeInterval { 30 * 60 }
+
     func placeholder(in context: Context) -> DashboardEntry {
-        .preview(configuration: Configuration.defaultConfiguration)
+        .preview(configuration: Configuration.defaultConfiguration, family: context.family)
     }
 
     func snapshot(for configuration: Configuration, in context: Context) async -> DashboardEntry {
         context.isPreview
-            ? .preview(configuration: configuration.instanceConfiguration)
-            : .cached(at: .now, configuration: configuration.instanceConfiguration)
+            ? .preview(configuration: configuration.instanceConfiguration, family: context.family)
+            : .cached(at: .now, configuration: configuration.instanceConfiguration, family: context.family)
     }
 
     func timeline(for configuration: Configuration, in context: Context) async -> Timeline<DashboardEntry> {
+        // Weather, Health, and Calendar can be read here, so a widget stays
+        // current without opening the app. Recently fetched sources are skipped.
+        await WidgetDataRefresher.refresh(userInitiated: false)
+
         let now = Date.now
-        let entry = DashboardEntry.cached(at: now, configuration: configuration.instanceConfiguration)
-        let rereadAt = now.addingTimeInterval(30 * 60)
-        // WidgetKit rereads the shared cache; it does not fetch source data.
-        // Schedule the stale boundary so a previously fresh widget visibly
-        // ages even if the app is not opened again.
-        let boundaries = Set(entry.updatedAtBySource.values.map {
-            $0.addingTimeInterval(DashboardFreshness.staleInterval)
-        }).filter { $0 > now && $0 <= rereadAt }.sorted()
-        let entries = [entry] + boundaries.map { entry.scheduled(at: $0) }
-        return Timeline(entries: entries, policy: .after(rereadAt))
+        let entry = DashboardEntry.cached(at: now, configuration: configuration.instanceConfiguration, family: context.family)
+        var reloadAt = now.addingTimeInterval(Self.reloadInterval)
+        // Fetch the following event once the shown one ends.
+        if let eventEnd = entry.metrics.first(where: { $0.id == "nextEvent" })?.endsAt,
+           eventEnd > now.addingTimeInterval(60) {
+            reloadAt = min(reloadAt, eventEnd.addingTimeInterval(1))
+        }
+
+        // One entry per minute, aligned to the oldest fetch, steps the age
+        // label and event countdowns without a per-second relative clock.
+        let anchor = entry.freshness.oldestFetchAt ?? now
+        let elapsed = max(0, now.timeIntervalSince(anchor))
+        var next = anchor.addingTimeInterval((floor(elapsed / 60) + 1) * 60)
+        var entries = [entry]
+        while next < reloadAt {
+            entries.append(entry.scheduled(at: next))
+            next = next.addingTimeInterval(60)
+        }
+        return Timeline(entries: entries, policy: .after(reloadAt))
     }
 }

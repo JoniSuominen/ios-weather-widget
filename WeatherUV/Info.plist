@@ -38,9 +38,11 @@
 	<key>UIBackgroundModes</key>
 	<array><string>fetch</string></array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Pulseboard reads upcoming events from calendars configured on this iPhone to show them in your dashboard and widgets.</string>
+	<string>Reads upcoming events from the calendars you select to show your next event in the app and widgets.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Pulseboard reads steps, resting heart rate, and sleep data to show selected metrics in your dashboard and widgets.</string>
+	<string>Reads steps, resting heart rate, and sleep to show them in the app and widgets.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your approximate location is used to get the local weather and UV forecast.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

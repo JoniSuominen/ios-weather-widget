@@ -9,6 +9,22 @@ protocol DashboardConnector {
     func disconnect() async -> DisconnectResult
 }
 
+enum OuraConnectionMethod: String, CaseIterable, Identifiable {
+    case appleHealth
+    case direct
+    var id: String { rawValue }
+    var displayName: String { self == .direct ? "Oura account" : "Apple Health" }
+
+    static let preferenceKey = "oura.connectionMethod"
+
+    /// The saved choice, shared with the widget so it knows whether Oura data
+    /// can be read from Apple Health outside the app.
+    static var stored: OuraConnectionMethod {
+        let defaults = UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard
+        return OuraConnectionMethod(rawValue: defaults.string(forKey: preferenceKey) ?? "") ?? .appleHealth
+    }
+}
+
 struct DisconnectResult: Codable, Equatable, Sendable {
     enum RemoteAuthorization: String, Codable, Equatable, Sendable {
         case notApplicable
@@ -35,24 +51,24 @@ struct DisconnectResult: Codable, Equatable, Sendable {
         if !localCredentialsCleared {
             switch remoteAuthorization {
             case .revoked:
-                return "Oura account access was revoked, but saved credentials could not be removed from this device. Pulseboard has stopped using the connection. Try disconnecting again."
+                return "Oura account access was revoked, but saved credentials could not be removed from this device. The connection is no longer used. Try disconnecting again."
             case .unconfirmed:
-                return "Pulseboard stopped using Oura, but could not confirm removal of saved credentials or revocation of Oura account access. Try disconnecting again and review access in your Oura account."
+                return "Oura is no longer used, but removal of saved credentials and revocation of Oura account access could not be confirmed. Try disconnecting again and review access in your Oura account."
             case .noStoredCredentials:
-                return "Pulseboard stopped using Oura, but could not confirm removal of saved credentials from this device. Try disconnecting again."
+                return "Oura is no longer used, but removal of saved credentials from this device could not be confirmed. Try disconnecting again."
             case .notApplicable:
-                return "Pulseboard stopped using this source, but could not confirm removal of local credentials. Permissions remain in iOS Settings."
+                return "This source is no longer used, but removal of local credentials could not be confirmed. Permissions remain in iOS Settings."
             }
         }
         switch remoteAuthorization {
         case .notApplicable:
-            return "Disconnected in Pulseboard. Permissions granted in iOS Settings remain unchanged."
+            return "Disconnected. Permissions granted in iOS Settings remain unchanged."
         case .revoked:
             return "Disconnected from Oura. Saved credentials were removed and Oura account access was revoked."
         case .unconfirmed:
-            return "Disconnected in Pulseboard and removed saved Oura credentials. Revoking access in your Oura account could not be confirmed. Review account access in Oura."
+            return "Disconnected and removed saved Oura credentials. Revoking access in your Oura account could not be confirmed. Review account access in Oura."
         case .noStoredCredentials:
-            return "Disconnected in Pulseboard. No saved Oura credentials were found. You can review previous app access in your Oura account."
+            return "Disconnected. No saved Oura credentials were found. You can review previous app access in your Oura account."
         }
     }
 }

@@ -1,6 +1,7 @@
 import Foundation
 
 enum DataSource: String, Codable, CaseIterable, Identifiable {
+    case weather = "Weather"
     case appleHealth = "Apple Health"
     case oura = "Oura"
     case googleCalendar = "Google Calendar"
@@ -16,6 +17,7 @@ enum DataSource: String, Codable, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .weather: return "cloud.sun.fill"
         case .appleHealth: return "heart.fill"
         case .oura: return "circle.hexagongrid.fill"
         case .googleCalendar: return "calendar"
@@ -40,6 +42,8 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
     /// Calendar title kept only when the user explicitly enables titles.
     /// Widget privacy projection must remove it before rendering a discreet widget.
     let privateValue: String?
+    /// End of a calendar event, used to show "Now" and to reload when it ends.
+    let endsAt: Date?
 
     var displayValue: String { privateValue ?? value }
 
@@ -54,7 +58,8 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         numericValue: Double? = nil,
         targetValue: Double? = nil,
         observedAt: Date? = nil,
-        privateValue: String? = nil
+        privateValue: String? = nil,
+        endsAt: Date? = nil
     ) {
         self.id = id
         self.source = source
@@ -67,6 +72,7 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         self.targetValue = targetValue
         self.observedAt = observedAt
         self.privateValue = privateValue
+        self.endsAt = endsAt
     }
 
     /// A normalized, finite goal or score. Metrics without a meaningful target
@@ -80,11 +86,16 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
 
     /// Illustrative data for WidgetKit placeholders and previews only.
     static let defaults: [DashboardMetric] = [
+        .init(id: "temperature", source: .weather, title: "Now", value: "14°", detail: "Partly cloudy · 17° / 9°", symbol: "cloud.sun.fill", tint: "orange", numericValue: 14),
+        .init(id: "uv", source: .weather, title: "UV index", value: "5", detail: "Moderate · peak 6 at 13:00", symbol: "sun.max.fill", tint: "yellow", numericValue: 5, targetValue: 11),
+        .init(id: "rain", source: .weather, title: "Rain today", value: "2.4 mm", detail: "60% · most likely 15:00", symbol: "drop.fill", tint: "blue", numericValue: 2.4),
+        .init(id: "tomorrow", source: .weather, title: "Tomorrow", value: "12°", detail: "Rain · 15° / 8°", symbol: "cloud.rain.fill", tint: "teal", numericValue: 12),
         .init(id: "readiness", source: .oura, title: "Readiness", value: "86", detail: "Optimal", symbol: "sparkles", tint: "violet", numericValue: 86, targetValue: 100),
         .init(id: "sleep", source: .oura, title: "Sleep", value: "7h 42m", detail: "Score 91", symbol: "moon.stars.fill", tint: "indigo"),
         .init(id: "steps", source: .appleHealth, title: "Steps", value: "8,420", detail: "84% of goal", symbol: "figure.walk", tint: "mint", numericValue: 8420, targetValue: 10000),
-        .init(id: "heart", source: .appleHealth, title: "Heart rate", value: "62", detail: "bpm resting", symbol: "heart.fill", tint: "pink"),
-        .init(id: "nextEvent", source: .googleCalendar, title: "Up next", value: "Design sync", detail: "10:30 · in 24 min", symbol: "calendar", tint: "blue")
+        .init(id: "heart", source: .appleHealth, title: "Resting heart rate", value: "62", detail: "bpm resting", symbol: "heart.fill", tint: "pink"),
+        .init(id: "nextEvent", source: .googleCalendar, title: "Up next", value: "Busy", detail: "", symbol: "calendar", tint: "blue",
+              observedAt: Date.now.addingTimeInterval(24 * 60), privateValue: "Design sync", endsAt: Date.now.addingTimeInterval(54 * 60))
     ]
 }
 
@@ -148,7 +159,7 @@ enum DashboardStore {
         var current = metrics
         current.removeAll { $0.source == source }
         current.append(contentsOf: newMetrics.filter { $0.source == source })
-        let order = ["readiness", "sleep", "steps", "heart", "nextEvent"]
+        let order = MetricCatalog.all.map(\.id)
         current.sort {
             (order.firstIndex(of: $0.id) ?? order.count) <
                 (order.firstIndex(of: $1.id) ?? order.count)
@@ -178,7 +189,8 @@ enum DashboardStore {
         defaults.removeObject(forKey: sourceUpdatesKey)
         defaults.removeObject(forKey: sourceErrorsKey)
         CalendarPreferences.reset()
-        WidgetPreferences.reset()
+        WidgetDesignStore.reset()
+        WeatherLocationStore.clear()
         defaults.set(1, forKey: privacyVersionKey)
     }
 

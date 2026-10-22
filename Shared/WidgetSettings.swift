@@ -1,31 +1,41 @@
 import Foundation
 
-enum WidgetLayout: String, CaseIterable, Identifiable {
-    case balance
-    case recovery
-    case schedule
+/// Every metric a tile or Lock Screen widget can show, including ones whose
+/// source is not connected yet. The order is also the dashboard order.
+struct MetricDescriptor: Identifiable, Hashable {
+    let id: String
+    let name: String
+    let source: DataSource
+    let symbol: String
+}
 
-    var id: String { rawValue }
+enum MetricCatalog {
+    static let all: [MetricDescriptor] = [
+        .init(id: "temperature", name: "Temperature", source: .weather, symbol: "thermometer.medium"),
+        .init(id: "uv", name: "UV index", source: .weather, symbol: "sun.max.fill"),
+        .init(id: "rain", name: "Rain today", source: .weather, symbol: "drop.fill"),
+        .init(id: "tomorrow", name: "Tomorrow", source: .weather, symbol: "calendar"),
+        .init(id: "readiness", name: "Readiness", source: .oura, symbol: "sparkles"),
+        .init(id: "sleep", name: "Sleep", source: .oura, symbol: "moon.stars.fill"),
+        .init(id: "steps", name: "Steps", source: .appleHealth, symbol: "figure.walk"),
+        .init(id: "heart", name: "Resting heart rate", source: .appleHealth, symbol: "heart.fill"),
+        .init(id: "nextEvent", name: "Next event", source: .googleCalendar, symbol: "calendar")
+    ]
 
-    var displayName: String {
-        switch self {
-        case .balance: return "Balance"
-        case .recovery: return "Recovery"
-        case .schedule: return "Schedule"
-        }
+    static func descriptor(for id: String) -> MetricDescriptor? {
+        all.first { $0.id == id }
     }
 
-    fileprivate var metricPriority: [String] {
-        switch self {
-        case .balance: return ["readiness", "steps", "nextEvent", "sleep", "heart"]
-        case .recovery: return ["readiness", "sleep", "heart", "nextEvent", "steps"]
-        case .schedule: return ["nextEvent", "readiness", "steps", "sleep", "heart"]
-        }
-    }
+    /// Lock Screen widgets set to Automatic show the first available metric.
+    static let automaticPriority = ["uv", "temperature", "nextEvent", "readiness", "steps", "sleep", "heart", "rain", "tomorrow"]
 }
 
 enum WidgetMetricChoice: String, CaseIterable, Identifiable {
     case automatic
+    case uv
+    case temperature
+    case rain
+    case tomorrow
     case readiness
     case sleep
     case steps
@@ -36,30 +46,25 @@ enum WidgetMetricChoice: String, CaseIterable, Identifiable {
     var metricID: String { self == .automatic ? "" : rawValue }
 
     var displayName: String {
-        switch self {
-        case .automatic: return "Automatic"
-        case .readiness: return "Readiness"
-        case .sleep: return "Sleep"
-        case .steps: return "Steps"
-        case .heart: return "Resting heart rate"
-        case .nextEvent: return "Next event"
-        }
+        self == .automatic ? "Automatic" : MetricCatalog.descriptor(for: rawValue)?.name ?? rawValue
     }
 }
 
 /// A widget's own settings. Installed widgets always receive this value from
 /// their configuration intent, so one widget cannot change another's choices.
 struct WidgetInstanceConfiguration: Equatable {
-    let layout: WidgetLayout
+    /// Home Screen tile layout. Nil uses the first layout for the widget's size.
+    let designID: String?
+    /// Lock Screen metric. Empty means automatic.
     let primaryMetricID: String
     let privacyMode: WidgetPrivacyMode
 
     init(
-        layout: WidgetLayout = .balance,
+        designID: String? = nil,
         primaryMetricID: String = "",
         privacyMode: WidgetPrivacyMode = .discreet
     ) {
-        self.layout = layout
+        self.designID = designID
         self.primaryMetricID = primaryMetricID
         self.privacyMode = privacyMode
     }
@@ -68,45 +73,7 @@ struct WidgetInstanceConfiguration: Equatable {
     static let lockDefault = WidgetInstanceConfiguration(privacyMode: .discreet)
 
     func orderedMetrics(_ metrics: [DashboardMetric]) -> [DashboardMetric] {
-        WidgetPreferences.orderedMetrics(metrics, layout: layout, primaryMetricID: primaryMetricID)
-    }
-
-    func renderedMetrics(_ metrics: [DashboardMetric]) -> [DashboardMetric] {
-        orderedMetrics(WidgetPrivacy.render(metrics, mode: privacyMode))
-    }
-}
-
-/// Preferences for the app's widget studio preview. Widget extensions use
-/// WidgetInstanceConfiguration from each widget's intent instead.
-enum WidgetPreferences {
-    private static let layoutKey = "widget.layout"
-    private static let primaryMetricKey = "widget.primaryMetricID"
-
-    private static var defaults: UserDefaults {
-        UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard
-    }
-
-    static var layout: WidgetLayout {
-        get { WidgetLayout(rawValue: defaults.string(forKey: layoutKey) ?? "") ?? .balance }
-        set { defaults.set(newValue.rawValue, forKey: layoutKey) }
-    }
-
-    /// Empty means use the current layout's first available metric.
-    static var primaryMetricID: String {
-        get { defaults.string(forKey: primaryMetricKey) ?? "" }
-        set { defaults.set(newValue, forKey: primaryMetricKey) }
-    }
-
-    static func orderedMetrics(_ metrics: [DashboardMetric]) -> [DashboardMetric] {
-        orderedMetrics(metrics, layout: layout, primaryMetricID: primaryMetricID)
-    }
-
-    static func orderedMetrics(
-        _ metrics: [DashboardMetric],
-        layout: WidgetLayout,
-        primaryMetricID: String
-    ) -> [DashboardMetric] {
-        let priorities = layout.metricPriority
+        let priorities = MetricCatalog.automaticPriority
         // Preserve source order for equally ranked or new metric types.
         var ordered = metrics.enumerated().sorted { lhs, rhs in
             let left = priorities.firstIndex(of: lhs.element.id) ?? priorities.count
@@ -114,24 +81,12 @@ enum WidgetPreferences {
             return left == right ? lhs.offset < rhs.offset : left < right
         }.map(\.element)
         if !primaryMetricID.isEmpty, let index = ordered.firstIndex(where: { $0.id == primaryMetricID }) {
-            let primary = ordered.remove(at: index)
-            ordered.insert(primary, at: 0)
-        }
-        // A medium widget shows four metrics. Keep the next event visible when
-        // a custom primary metric would otherwise push it out of that group.
-        if let index = ordered.firstIndex(where: { $0.id == "nextEvent" }), index > 3 {
-            let event = ordered.remove(at: index)
-            ordered.insert(event, at: 3)
+            ordered.insert(ordered.remove(at: index), at: 0)
         }
         return ordered
     }
 
-    static func primaryMetric(in metrics: [DashboardMetric]) -> DashboardMetric? {
-        orderedMetrics(metrics).first
-    }
-
-    static func reset() {
-        defaults.removeObject(forKey: layoutKey)
-        defaults.removeObject(forKey: primaryMetricKey)
+    func renderedMetrics(_ metrics: [DashboardMetric]) -> [DashboardMetric] {
+        orderedMetrics(WidgetPrivacy.render(metrics, mode: privacyMode))
     }
 }

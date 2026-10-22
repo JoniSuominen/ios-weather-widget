@@ -3,25 +3,10 @@ import XCTest
 @testable import WeatherUV
 
 final class WidgetPrivacyTests: XCTestCase {
-    private var previousLayout: WidgetLayout = .balance
-    private var previousPrimaryMetricID = ""
-
-    override func setUp() {
-        super.setUp()
-        previousLayout = WidgetPreferences.layout
-        previousPrimaryMetricID = WidgetPreferences.primaryMetricID
-    }
-
-    override func tearDown() {
-        WidgetPreferences.layout = previousLayout
-        WidgetPreferences.primaryMetricID = previousPrimaryMetricID
-        super.tearDown()
-    }
-
     func testNewLockWidgetKeepsHealthValuesPrivate() {
         let configuration = LockWidgetIntent().instanceConfiguration
         XCTAssertEqual(configuration, .lockDefault)
-        XCTAssertEqual(configuration.layout, .balance)
+        XCTAssertNil(configuration.designID)
         XCTAssertEqual(configuration.primaryMetricID, "")
         XCTAssertEqual(configuration.privacyMode, .discreet)
 
@@ -33,8 +18,7 @@ final class WidgetPrivacyTests: XCTestCase {
     func testNewHomeWidgetShowsHealthValuesByDefault() {
         let configuration = HomeWidgetIntent().instanceConfiguration
         XCTAssertEqual(configuration, .homeDefault)
-        XCTAssertEqual(configuration.layout, .balance)
-        XCTAssertEqual(configuration.primaryMetricID, "")
+        XCTAssertNil(configuration.designID)
         XCTAssertEqual(configuration.privacyMode, .showValues)
 
         let original = healthMetric("readiness")
@@ -56,70 +40,66 @@ final class WidgetPrivacyTests: XCTestCase {
 
     func testUnspecifiedInstancePrivacyIsConservative() {
         XCTAssertEqual(WidgetInstanceConfiguration().privacyMode, .discreet)
-        XCTAssertEqual(WidgetInstanceConfiguration(layout: .schedule, primaryMetricID: "steps").privacyMode, .discreet)
+        XCTAssertEqual(WidgetInstanceConfiguration(designID: "layout", primaryMetricID: "steps").privacyMode, .discreet)
     }
 
     func testIntentParametersDescribeOnlyTheConfiguredWidget() {
+        let design = WidgetDesign.starter(for: .medium)
         var home = HomeWidgetIntent()
-        home.layout = .schedule
-        home.primaryMetric = .steps
+        home.design = WidgetDesignEntity(design)
         home.privacyMode = .discreet
         var lock = LockWidgetIntent()
-        lock.layout = .recovery
         lock.primaryMetric = .sleep
         lock.privacyMode = .showValues
 
-        XCTAssertEqual(home.instanceConfiguration, WidgetInstanceConfiguration(layout: .schedule, primaryMetricID: "steps", privacyMode: .discreet))
-        XCTAssertEqual(lock.instanceConfiguration, WidgetInstanceConfiguration(layout: .recovery, primaryMetricID: "sleep", privacyMode: .showValues))
+        XCTAssertEqual(home.instanceConfiguration, WidgetInstanceConfiguration(designID: design.id, privacyMode: .discreet))
+        XCTAssertEqual(lock.instanceConfiguration, WidgetInstanceConfiguration(primaryMetricID: "sleep", privacyMode: .showValues))
         XCTAssertEqual(HomeWidgetIntent().instanceConfiguration, .homeDefault)
         XCTAssertEqual(LockWidgetIntent().instanceConfiguration, .lockDefault)
     }
 
-    func testEachWidgetKeepsItsOwnLayoutAndPrimaryMetricWhenAppPreferencesChange() {
-        let schedule = WidgetInstanceConfiguration(layout: .schedule, privacyMode: .showValues)
-        let recovery = WidgetInstanceConfiguration(layout: .recovery, primaryMetricID: "sleep", privacyMode: .discreet)
+    func testEachLockWidgetKeepsItsOwnPrimaryMetric() {
+        let uv = WidgetInstanceConfiguration(primaryMetricID: "uv", privacyMode: .showValues)
+        let sleep = WidgetInstanceConfiguration(primaryMetricID: "sleep", privacyMode: .discreet)
         let metrics = [
             healthMetric("steps", source: .appleHealth),
             calendarMetric(),
-            healthMetric("heart", source: .appleHealth),
-            healthMetric("readiness"),
+            weatherMetric("uv"),
             healthMetric("sleep")
         ]
-
-        WidgetPreferences.layout = .balance
-        WidgetPreferences.primaryMetricID = "heart"
-        let scheduleOrder = schedule.orderedMetrics(metrics).map(\.id)
-        let recoveryOrder = recovery.orderedMetrics(metrics).map(\.id)
-        XCTAssertEqual(scheduleOrder.first, "nextEvent")
-        XCTAssertEqual(recoveryOrder.first, "sleep")
-        XCTAssertNotEqual(scheduleOrder, recoveryOrder)
-
-        WidgetPreferences.layout = .recovery
-        WidgetPreferences.primaryMetricID = "steps"
-        XCTAssertEqual(schedule.orderedMetrics(metrics).map(\.id), scheduleOrder)
-        XCTAssertEqual(recovery.orderedMetrics(metrics).map(\.id), recoveryOrder)
-        XCTAssertEqual(schedule.renderedMetrics(metrics).map(\.id), scheduleOrder)
-        XCTAssertEqual(recovery.renderedMetrics(metrics).map(\.id), recoveryOrder)
-        XCTAssertEqual(recovery.renderedMetrics(metrics).first?.value, "Hidden")
+        XCTAssertEqual(uv.orderedMetrics(metrics).first?.id, "uv")
+        XCTAssertEqual(sleep.orderedMetrics(metrics).first?.id, "sleep")
+        XCTAssertEqual(sleep.renderedMetrics(metrics).first?.value, "Hidden")
     }
 
-    func testMissingInstancePrimaryFallsBackToThatInstancesLayout() {
-        WidgetPreferences.layout = .balance
-        WidgetPreferences.primaryMetricID = "steps"
-        let configuration = WidgetInstanceConfiguration(layout: .schedule, primaryMetricID: "removedMetric")
-        let metrics = [healthMetric("steps", source: .appleHealth), calendarMetric()]
-        XCTAssertEqual(configuration.orderedMetrics(metrics).first?.id, "nextEvent")
-        XCTAssertTrue(configuration.renderedMetrics([]).isEmpty)
+    func testAutomaticAndMissingPrimaryFallBackToUVFirstPriority() {
+        let metrics = [healthMetric("steps", source: .appleHealth), calendarMetric(), weatherMetric("temperature"), weatherMetric("uv")]
+        XCTAssertEqual(WidgetInstanceConfiguration().orderedMetrics(metrics).map(\.id), ["uv", "temperature", "nextEvent", "steps"])
+        let missing = WidgetInstanceConfiguration(primaryMetricID: "removedMetric")
+        XCTAssertEqual(missing.orderedMetrics(metrics).first?.id, "uv")
+        XCTAssertTrue(missing.renderedMetrics([]).isEmpty)
     }
 
     func testMetricChoicesUseStableCacheIDsAndAutomaticNeedsNoPrimary() {
         let choices: [(WidgetMetricChoice, String)] = [
-            (.automatic, ""), (.readiness, "readiness"), (.sleep, "sleep"),
-            (.steps, "steps"), (.heart, "heart"), (.nextEvent, "nextEvent")
+            (.automatic, ""), (.uv, "uv"), (.temperature, "temperature"), (.rain, "rain"), (.tomorrow, "tomorrow"),
+            (.readiness, "readiness"), (.sleep, "sleep"), (.steps, "steps"), (.heart, "heart"), (.nextEvent, "nextEvent")
         ]
         for (choice, expectedID) in choices {
             XCTAssertEqual(choice.metricID, expectedID)
+            if choice != .automatic {
+                XCTAssertNotNil(MetricCatalog.descriptor(for: choice.metricID), "Missing catalog entry for \(choice)")
+            }
         }
+    }
+
+    func testWeatherIsPublicAndStaysVisibleInDiscreetWidgets() {
+        let uv = weatherMetric("uv")
+        let rendered = WidgetPrivacy.render([uv], mode: .discreet)
+        XCTAssertEqual(rendered.first?.value, uv.value)
+        XCTAssertEqual(rendered.first?.detail, uv.detail)
+        XCTAssertEqual(rendered.first?.gaugeProgress, uv.gaugeProgress)
+        XCTAssertNil(rendered.first?.privateValue)
     }
 
     func testDiscreetHealthRemovesValuesAndAllIndirectValueChannels() throws {
@@ -234,6 +214,13 @@ final class WidgetPrivacyTests: XCTestCase {
         let shownCalendar = WidgetPrivacy.render(oldMetrics.filter { $0.source == .googleCalendar }, mode: .showValues)
         XCTAssertEqual(shownCalendar.first?.value, "Busy")
         XCTAssertFalse(String(decoding: try JSONEncoder().encode(shownCalendar), as: UTF8.self).contains("SECRET"))
+    }
+
+    private func weatherMetric(_ id: String) -> DashboardMetric {
+        DashboardMetric(
+            id: id, source: .weather, title: "UV index", value: "5", detail: "Moderate · peak 6 at 13:00",
+            symbol: "sun.max.fill", tint: "yellow", numericValue: 5, targetValue: 11, privateValue: "never shown"
+        )
     }
 
     private func healthMetric(_ id: String, source: DataSource = .oura) -> DashboardMetric {

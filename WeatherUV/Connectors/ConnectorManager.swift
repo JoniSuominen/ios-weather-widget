@@ -2,13 +2,6 @@ import Combine
 import Foundation
 import WidgetKit
 
-enum OuraConnectionMethod: String, CaseIterable, Identifiable {
-    case appleHealth
-    case direct
-    var id: String { rawValue }
-    var displayName: String { self == .direct ? "Oura account" : "Apple Health" }
-}
-
 @MainActor
 final class ConnectorManager: ObservableObject {
     static let shared = ConnectorManager()
@@ -38,7 +31,7 @@ final class ConnectorManager: ObservableObject {
     private var isResetting = false
     private var isSwitchingOura = false
     private var resetRevision = 0
-    private static let methodKey = "oura.connectionMethod"
+    private static let methodKey = OuraConnectionMethod.preferenceKey
     // Retain only cleanup status, never account identifiers or credentials. A
     // failed Keychain deletion must remain visible after relaunching the app.
     private static let disconnectResultKey = "oura.disconnectResult"
@@ -48,7 +41,7 @@ final class ConnectorManager: ObservableObject {
 
     init(connectors: [any DashboardConnector]? = nil,
          directOuraConnector: (any DashboardConnector)? = nil) {
-        let local = connectors ?? [HealthKitConnector(), OuraHealthConnector(), CalendarConnector()]
+        let local = connectors ?? [WeatherConnector(locator: DeviceLocator()), HealthKitConnector(), OuraHealthConnector(), CalendarConnector()]
         self.connectors = Dictionary(uniqueKeysWithValues: local.map { ($0.source, $0) })
         self.directOuraConnector = directOuraConnector ?? OuraAPIConnector()
         let defaults = UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard
@@ -178,7 +171,35 @@ final class ConnectorManager: ObservableObject {
         }
     }
 
+    /// Picks a city, or nil for the device location, then fetches its forecast.
+    func setWeatherLocation(_ location: WeatherLocation?) async {
+        guard !isResetting, !activity(for: .weather).isBusy else { return }
+        if let location {
+            WeatherLocationStore.save(location)
+        } else {
+            WeatherLocationStore.clear()
+        }
+        if connectedSources.contains(.weather) {
+            await refresh(.weather)
+        } else {
+            await connect(.weather)
+        }
+    }
+
+    /// Widgets refresh the shared cache on their own; show what they fetched.
+    func reloadFromStore() {
+        synchronizeFromStore()
+        for source in connectedSources where !activity(for: source).isBusy {
+            if let error = DashboardStore.error(for: source) {
+                activities[source] = .failed(error)
+            } else if case .failed = activity(for: source) {
+                activities[source] = .idle
+            }
+        }
+    }
+
     func refreshIfNeeded(minimumInterval: TimeInterval = 300) async {
+        reloadFromStore()
         if let calendar = connectors[.googleCalendar] as? CalendarConnector,
            calendar.clearSnapshotIfAccessUnavailable() {
             calendarPreferencesDidChange()

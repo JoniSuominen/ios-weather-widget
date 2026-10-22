@@ -16,7 +16,7 @@ The app and widget source are included. A signed release still needs an Apple De
 
 3. Select the **WeatherUV** scheme and an installed iPhone simulator. Press **⌘R**.
 4. Open Today, Sources, and Widgets. Test empty states and saved widget choices. HealthKit availability and data vary in the simulator; final health authorization testing needs an iPhone.
-5. Launch the app once, return to the Home Screen, long-press an empty area, and add Pulseboard's small and medium widgets. Customize the Lock Screen to add circular, rectangular, and inline widgets.
+5. Launch the app once, return to the Home Screen, long-press an empty area, and add the small, medium, and large Dashboard widgets. Design layouts in the Widgets tab and pick one per widget in Edit Widget. Customize the Lock Screen to add circular, rectangular, and inline widgets.
 
 `project.yml` is the project source of truth. Regenerate after editing it; generated Xcode settings may be overwritten. Simulator builds do not require a signing team. The repository's **iOS Build** GitHub Actions workflow validates the app and widget; inspect that run's actual result before treating a commit as verified. CI compilation does not validate physical-device permissions, OAuth configuration, or delivery through TestFlight.
 
@@ -61,7 +61,7 @@ The configured release identifiers are:
 - Widget: `com.jonisuominen.pulseboard.widget`
 - App Group: `group.com.jonisuominen.pulseboard`
 
-Register them under the Apple Developer team that will distribute the app. Enable the same App Group for both targets and HealthKit for the host app. Contributors must replace the identifiers consistently in `project.yml`, both entitlement files, and the shared store.
+Register them under the Apple Developer team that will distribute the app. Enable the same App Group and HealthKit for both targets; the widget reads Health data when it refreshes. Contributors must replace the identifiers consistently in `project.yml`, both entitlement files, and the shared store.
 
 1. In **Xcode → Settings → Accounts**, add the developer Apple ID.
 2. Select each target's **Signing & Capabilities**, choose the Team, and enable automatic signing. Confirm matching App Group entitlements.
@@ -92,7 +92,9 @@ These checks require execution on a real iPhone; their presence here does not me
 - [ ] Apple Health mode displays Oura-origin sleep when sharing is enabled, and does not invent a Readiness score.
 - [ ] Oura account sign-in, cancellation, rejection, relaunch, expired access-token refresh, and revoked access behave correctly. Confirm the broker has no token/body logs.
 - [ ] Calendar permission denial, no upcoming events, changed events, and a Google calendar configured in iOS behave correctly.
-- [ ] Small and medium Home Screen widgets plus all three Lock Screen families render correctly. Change layout/metric and confirm actual widgets use the saved choice.
+- [ ] Small, medium, and large Home Screen widgets plus all three Lock Screen families render correctly. Edit a layout and confirm installed widgets update; pick different layouts for two widgets of the same size.
+- [ ] The widget refresh tile updates weather, Health, and Calendar values without opening the app, and its minute age resets.
+- [ ] Weather works with location allowed, with location denied plus a chosen city, and after switching between them.
 - [ ] Step and sleep gauges use correct units; empty values do not produce misleading progress.
 - [ ] Manual refresh fetches new source data. Airplane Mode retains last known data with its original source timestamp and visible stale status after an hour.
 - [ ] Relaunch, reboot, locked-device conditions, disabled Background App Refresh, and Low Power Mode do not falsely mark old data fresh. Background scheduling may be delayed by iOS.

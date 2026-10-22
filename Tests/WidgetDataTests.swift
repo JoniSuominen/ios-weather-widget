@@ -109,31 +109,18 @@ final class WidgetDataTests: XCTestCase {
         XCTAssertNil(metric("steps", numericValue: 10, targetValue: .nan).gaugeProgress)
     }
 
-    func testPreferencesPersistAndChangeMetricOrder() {
-        WidgetPreferences.layout = .schedule
-        WidgetPreferences.primaryMetricID = ""
-        XCTAssertEqual(WidgetPreferences.layout, .schedule)
-        XCTAssertEqual(WidgetPreferences.orderedMetrics(DashboardMetric.defaults).first?.id, "nextEvent")
-
-        WidgetPreferences.layout = .recovery
-        XCTAssertEqual(Array(WidgetPreferences.orderedMetrics(DashboardMetric.defaults).prefix(3)).map(\.id), ["readiness", "sleep", "heart"])
-
-        WidgetPreferences.primaryMetricID = "steps"
-        XCTAssertEqual(WidgetPreferences.primaryMetricID, "steps")
-        XCTAssertEqual(WidgetPreferences.primaryMetric(in: DashboardMetric.defaults)?.id, "steps")
-        XCTAssertTrue(WidgetPreferences.orderedMetrics(DashboardMetric.defaults).prefix(4).contains { $0.id == "nextEvent" })
+    func testLegacySnapshotWithoutEventEndStillDecodes() throws {
+        let json = """
+        [{"id":"nextEvent","source":"Google Calendar","title":"Up next","value":"Busy","detail":"10:30","symbol":"calendar","tint":"blue","observedAt":1000}]
+        """
+        let metrics = try JSONDecoder().decode([DashboardMetric].self, from: Data(json.utf8))
+        XCTAssertNil(metrics.first?.endsAt)
     }
 
-    func testEveryMediumLayoutIncludesCalendarAndUnavailablePrimaryFallsBack() {
-        for layout in WidgetLayout.allCases {
-            let ordered = WidgetPreferences.orderedMetrics(DashboardMetric.defaults, layout: layout, primaryMetricID: "steps")
-            XCTAssertEqual(ordered.first?.id, "steps")
-            XCTAssertTrue(ordered.prefix(4).contains { $0.id == "nextEvent" }, "Calendar missing from \(layout)")
-        }
-        WidgetPreferences.layout = .schedule
-        WidgetPreferences.primaryMetricID = "removedMetric"
-        XCTAssertEqual(WidgetPreferences.primaryMetric(in: DashboardMetric.defaults)?.id, "nextEvent")
-        XCTAssertNil(WidgetPreferences.primaryMetric(in: []))
+    func testCachedMetricsKeepCatalogOrderAcrossSources() {
+        DashboardStore.replaceMetrics([metric("steps")], for: .appleHealth)
+        DashboardStore.replaceMetrics([metric("uv", source: .weather), metric("temperature", source: .weather)], for: .weather)
+        XCTAssertEqual(DashboardStore.metrics.map(\.id), ["temperature", "uv", "steps"])
     }
 
     func testRefreshFailurePreservesLastSuccessfulFetchAndMetrics() {
@@ -196,15 +183,18 @@ final class WidgetDataTests: XCTestCase {
         XCTAssertNotNil(DashboardStore.updatedAt(for: .appleHealth))
 
         DashboardStore.recordError("Offline", for: .appleHealth)
-        WidgetPreferences.layout = .schedule
-        WidgetPreferences.primaryMetricID = "steps"
+        var design = WidgetDesignStore.newDesign(for: .medium)
+        design.name = "Mine"
+        WidgetDesignStore.save(design)
+        WeatherLocationStore.save(WeatherLocation(name: "Helsinki", latitude: 60.17, longitude: 24.94, isCurrentLocation: false))
         DashboardStore.deleteLocalData()
         XCTAssertTrue(DashboardStore.metrics.isEmpty)
         XCTAssertNil(DashboardStore.updatedAt)
         XCTAssertNil(DashboardStore.updatedAt(for: .appleHealth))
         XCTAssertNil(DashboardStore.error(for: .appleHealth))
-        XCTAssertEqual(WidgetPreferences.layout, .balance)
-        XCTAssertEqual(WidgetPreferences.primaryMetricID, "")
+        XCTAssertNil(WidgetDesignStore.design(id: design.id))
+        XCTAssertEqual(WidgetDesignStore.designs, WidgetDesign.starters)
+        XCTAssertNil(WeatherLocationStore.location)
     }
 
     private func clearOuraPreferences() {

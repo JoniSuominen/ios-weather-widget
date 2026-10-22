@@ -15,7 +15,7 @@ struct ContentView: View {
             SourcesView()
                 .tabItem { Label("Sources", systemImage: "link") }
                 .tag(1)
-            WidgetStudioView()
+            LayoutsView()
                 .tabItem { Label("Widgets", systemImage: "rectangle.3.group.fill") }
                 .tag(2)
         }
@@ -36,53 +36,43 @@ private struct DashboardView: View {
 
     private var metrics: [DashboardMetric] { connectorManager.metrics }
     private var isRefreshing: Bool { connectorManager.activities.values.contains { $0.isBusy } }
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: .now) {
-        case 5..<12: return "Good morning"
-        case 12..<18: return "Good afternoon"
-        default: return "Good evening"
-        }
-    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(greeting).font(.title.bold())
-                        Text(Date.now.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-                            .foregroundStyle(.secondary)
-                    }
-
+                VStack(alignment: .leading, spacing: 16) {
                     SourceRefreshWarnings()
 
                     if metrics.isEmpty {
                         if isRefreshing {
                             VStack(spacing: 12) {
                                 ProgressView()
-                                Text("Refreshing your data…").foregroundStyle(.secondary)
+                                Text("Refreshing…").foregroundStyle(.secondary)
                             }
                             .frame(maxWidth: .infinity, minHeight: 240)
                         } else {
                             ContentUnavailableView(
-                                connectorManager.connectedSources.isEmpty ? "No connected data" : "No data available yet",
+                                connectorManager.connectedSources.isEmpty ? "Nothing connected" : "No data yet",
                                 systemImage: "link.badge.plus",
-                                description: Text("Connect or refresh Apple Health, Oura, or Calendar from the Sources tab. Read access is controlled by your permissions.")
+                                description: Text("Connect weather, Apple Health, Oura, or Calendar in Sources.")
                             )
                             .frame(minHeight: 240)
                         }
                     } else {
-                        hero
-                        LazyVGrid(
-                            columns: dynamicTypeSize.isAccessibilitySize
-                                ? [.init(.flexible())]
-                                : [.init(.flexible()), .init(.flexible())],
-                            spacing: 12
-                        ) {
-                            ForEach(Array(metrics.dropFirst())) { MetricCard(metric: $0) }
+                        // Minute steps keep event countdowns and ages current.
+                        TimelineView(.everyMinute) { timeline in
+                            VStack(alignment: .leading, spacing: 16) {
+                                LazyVGrid(
+                                    columns: dynamicTypeSize.isAccessibilitySize
+                                        ? [.init(.flexible())]
+                                        : [.init(.flexible()), .init(.flexible())],
+                                    spacing: 12
+                                ) {
+                                    ForEach(metrics) { MetricCard(metric: $0, now: timeline.date) }
+                                }
+                                sourceRefreshDates(now: timeline.date)
+                            }
                         }
-                        DataFreshnessView(metrics: metrics)
-                        sourceRefreshDates
                     }
                 }
                 .padding()
@@ -109,66 +99,44 @@ private struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
-    private var hero: some View {
-        if let metric = metrics.first {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(metric.source.displayName, systemImage: metric.symbol)
-                    .font(.caption.bold())
-                Text(metric.displayValue).font(.largeTitle.bold().monospacedDigit())
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(metric.title).font(.headline)
-                Text(metric.detail).font(.subheadline).foregroundStyle(.white.opacity(0.85))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .foregroundStyle(.white)
-            .padding(20)
-            .background(
-                LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 24)
-            )
-            .accessibilityElement(children: .combine)
-        }
-    }
-
-    private var sourceRefreshDates: some View {
+    private func sourceRefreshDates(now: Date) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(DataSource.allCases.filter { connectorManager.connectedSources.contains($0) }) { source in
                 if let date = DashboardStore.updatedAt(for: source) {
-                    Text("\(source.displayName): last fetched \(date.formatted(.relative(presentation: .named)))")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text("\(source.displayName): \(UpdatedLabel.long(since: date, now: now).lowercased())")
                 } else {
                     Text("\(source.displayName): waiting for a successful refresh")
-                        .font(.caption).foregroundStyle(.secondary)
                 }
             }
         }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
 
 private struct MetricCard: View {
     let metric: DashboardMetric
-
-    private var color: Color {
-        switch metric.tint {
-        case "pink": return .pink
-        case "mint": return .mint
-        case "blue": return .blue
-        case "violet": return .purple
-        default: return .indigo
-        }
-    }
+    let now: Date
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(metric.source.displayName, systemImage: metric.symbol)
-                .font(.caption).foregroundStyle(color)
+        VStack(alignment: .leading, spacing: 8) {
+            Label(metric.title, systemImage: metric.symbol)
+                .font(.subheadline)
+                .foregroundStyle(TileTint.color(metric.tint))
                 .fixedSize(horizontal: false, vertical: true)
-            Text(metric.title).font(.subheadline).foregroundStyle(.secondary)
-            Text(metric.displayValue).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
-            Text(metric.detail).font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            if metric.id == "nextEvent", let start = metric.observedAt {
+                // Start time and title belong together on one line.
+                (Text(EventTiming.isOngoing(start: start, end: metric.endsAt, now: now) ? "Now" : EventTiming.startText(start, now: now)).bold()
+                    + Text(" " + metric.displayValue))
+                    .font(.title3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(EventTiming.relativeText(start: start, end: metric.endsAt, now: now))
+                    .font(.caption).foregroundStyle(.secondary)
+            } else {
+                Text(metric.displayValue).font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+                Text(metric.detail).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding()
@@ -182,16 +150,12 @@ private struct SourcesView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingPrivacy = false
     @State private var showingCalendarSettings = false
+    @State private var showingLocationPicker = false
     @State private var pendingSource: DataSource?
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Text("Bring your health, recovery, and schedule into one dashboard. Choose what you share before connecting each source.")
-                        .foregroundStyle(.secondary)
-                }
-
                 Section("Oura connection") {
                     Picker("Connect Oura through", selection: ouraMethodBinding) {
                         ForEach(OuraConnectionMethod.allCases) { method in
@@ -208,14 +172,14 @@ private struct SourcesView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
 
-                Section("Available integrations") {
+                Section("Sources") {
                     ForEach(DataSource.allCases) { source in
                         sourceRow(source)
                     }
                 }
 
                 Section("Privacy") {
-                    Label("Cached metrics are shared locally with your widgets. Oura account access also contacts Oura and the secure sign-in service.", systemImage: "lock.shield.fill")
+                    Label("Cached values are shared locally with your widgets. Weather requests send an approximate location to Open-Meteo. Oura account access also contacts Oura and the secure sign-in service.", systemImage: "lock.shield.fill")
                         .font(.footnote).foregroundStyle(.secondary)
                     Button("Read privacy policy") { showingPrivacy = true }
                 }
@@ -233,17 +197,26 @@ private struct SourcesView: View {
                     }
                 }
             }
-            .navigationTitle("Data sources")
+            .navigationTitle("Sources")
             .sheet(item: $pendingSource) { source in
                 PermissionPrimer(source: source, ouraMethod: connectorManager.ouraConnectionMethod) {
                     pendingSource = nil
                     Task { await connectorManager.connect(source) }
+                } chooseCity: {
+                    pendingSource = nil
+                    showingLocationPicker = true
                 }
             }
             .sheet(isPresented: $showingPrivacy) { PrivacyPolicyView() }
             .sheet(isPresented: $showingCalendarSettings) { CalendarSettingsView() }
+            .sheet(isPresented: $showingLocationPicker) {
+                LocationPickerView { location in
+                    showingLocationPicker = false
+                    Task { await connectorManager.setWeatherLocation(location) }
+                }
+            }
             .confirmationDialog(
-                "Delete Pulseboard data?",
+                "Delete local data?",
                 isPresented: $showingDeleteConfirmation,
                 titleVisibility: .visible
             ) {
@@ -251,7 +224,7 @@ private struct SourcesView: View {
                     Task { await connectorManager.deleteLocalData() }
                 }
             } message: {
-                Text("This removes cached metrics, app preferences, and connection state. Pulseboard also attempts to remove saved Oura credentials and revoke Oura access; the result is shown here. Provider records and iOS permissions remain unchanged.")
+                Text("This removes cached metrics, widget layouts, the weather location, app preferences, and connection state. Saved Oura credentials are removed and Oura access is revoked where possible; the result is shown here. Provider records and iOS permissions remain unchanged.")
             }
         }
     }
@@ -286,6 +259,14 @@ private struct SourcesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             sourceButton(source)
+            if source == .weather && connectorManager.connectedSources.contains(source) {
+                Button {
+                    showingLocationPicker = true
+                } label: {
+                    Label("Location: \(WeatherLocationStore.location?.name ?? "Current location")", systemImage: "location")
+                }
+                .disabled(connectorManager.isDeletingLocalData || connectorManager.activity(for: .weather).isBusy)
+            }
             if source == .googleCalendar && connectorManager.connectedSources.contains(source) {
                 Button {
                     showingCalendarSettings = true
@@ -338,6 +319,7 @@ private struct SourcesView: View {
 
     private func sourceColor(_ source: DataSource) -> Color {
         switch source {
+        case .weather: return .orange
         case .appleHealth: return .pink
         case .oura: return .purple
         case .googleCalendar: return .blue
@@ -346,12 +328,13 @@ private struct SourcesView: View {
 
     private func description(_ source: DataSource) -> String {
         switch source {
+        case .weather: return "Temperature, UV index, rain, and tomorrow's forecast"
         case .appleHealth: return "Steps and resting heart rate"
         case .oura:
             return connectorManager.ouraConnectionMethod == .direct
                 ? "Readiness and sleep from your Oura account"
                 : "Oura sleep shared with Apple Health"
-        case .googleCalendar: return "Calendars configured on this iPhone, including Google accounts"
+        case .googleCalendar: return "Calendars on this iPhone, including Google accounts"
         }
     }
 }
@@ -386,7 +369,7 @@ private struct CalendarSettingsView: View {
                         Label(message, systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
-                        Link("Open Pulseboard settings", destination: URL(string: UIApplication.openSettingsURLString)!)
+                        Link("Open Settings", destination: URL(string: UIApplication.openSettingsURLString)!)
                     } else if !isLoading && calendarStore.calendars.isEmpty {
                         Text("No calendars found. Add a calendar account in iOS Settings, then refresh this list.")
                             .foregroundStyle(.secondary)
@@ -401,7 +384,7 @@ private struct CalendarSettingsView: View {
                         .disabled(controlsUnavailable || isLoading || calendarStore.errorMessage != nil)
                     }
                     if selectedCalendarIDs.isEmpty {
-                        Text("No calendars selected. Pulseboard will not show events until you select one.")
+                        Text("No calendars selected. No events show until you select one.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     if !selectedCalendarIDs.isEmpty {
@@ -417,11 +400,11 @@ private struct CalendarSettingsView: View {
                 Section("Event title privacy") {
                     Toggle("Show event titles", isOn: eventTitleBinding)
                         .disabled(controlsUnavailable || (calendarStore.errorMessage != nil && !showEventTitles))
-                    Text("Off shows only availability and timing. On allows event titles in the dashboard and widgets configured to show values. Discreet widgets always hide titles.")
+                    Text("Off shows only availability and timing. On allows event titles in the app and in widgets set to show values. Discreet widgets always hide titles.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("System permission") {
-                    Text("This list reads calendars only when Pulseboard already has full Calendar access. Disconnecting Calendar in Pulseboard does not revoke iOS permission. Manage permission in Settings.")
+                    Text("This list reads calendars only with full Calendar access. Disconnecting Calendar here does not revoke iOS permission. Manage permission in Settings.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
@@ -530,17 +513,20 @@ private struct PermissionPrimer: View {
     let source: DataSource
     let ouraMethod: OuraConnectionMethod
     let connect: () -> Void
+    let chooseCity: () -> Void
 
     private var explanation: String {
         switch source {
+        case .weather:
+            return "Weather comes from Open-Meteo. Use your approximate location, or choose a city if you prefer not to share location. Only a rounded coordinate is sent."
         case .appleHealth:
-            return "Pulseboard asks to read your step count and resting heart rate from Apple Health. It never writes to your health records. Choose the categories you want to share in the next iOS permission screen."
+            return "Reads your step count and resting heart rate from Apple Health. Nothing is written to your health records. Choose the categories to share on the next iOS screen."
         case .oura where ouraMethod == .direct:
-            return "Sign in with Oura to let Pulseboard read your readiness and sleep. Oura and a secure sign-in service handle authorization and credential refresh. Access credentials are protected in the iOS Keychain. You can disconnect from Sources at any time."
+            return "Sign in with Oura to read your readiness and sleep. Oura and a secure sign-in service handle authorization and credential refresh. Access credentials are protected in the iOS Keychain. You can disconnect from Sources at any time."
         case .oura:
-            return "Pulseboard asks to read sleep records from Apple Health and shows only records written by Oura. First enable Apple Health sharing in the Oura app. This connection does not include Oura Readiness or sleep scores."
+            return "Reads sleep records from Apple Health and shows only records written by Oura. First enable Apple Health sharing in the Oura app. This connection does not include Oura Readiness or sleep scores."
         case .googleCalendar:
-            return "Pulseboard asks to read calendars on this iPhone, including Google accounts already added to iOS. After connecting, choose which calendars to include. No calendars are selected automatically. Event titles are hidden unless you turn them on; by default only availability and timing appear. Pulseboard does not change your events."
+            return "Reads calendars on this iPhone, including Google accounts already added to iOS. After connecting, choose which calendars to include; none are selected automatically. Event titles stay hidden unless you turn them on. Your events are never changed."
         }
     }
 
@@ -551,13 +537,18 @@ private struct PermissionPrimer: View {
                     Label("Connect \(source.displayName)", systemImage: source.symbol)
                         .font(.title2.bold())
                     Text(explanation).fixedSize(horizontal: false, vertical: true)
-                    Text("Your selection controls what appears in the dashboard and widgets. Disconnecting stops Pulseboard from using this source and clears its cached data. Oura credential removal and account revocation results are shown in Sources. System permissions are managed in iOS Settings.")
+                    Text("Your selection controls what appears in the app and widgets. Disconnecting stops using this source and clears its cached data. System permissions are managed in iOS Settings.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Button(action: connect) {
-                        Text(source == .oura && ouraMethod == .direct ? "Continue to Oura" : "Continue")
-                            .frame(maxWidth: .infinity)
+                        Text(primaryActionTitle).frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent).controlSize(.large)
+                    if source == .weather {
+                        Button(action: chooseCity) {
+                            Text("Choose a city").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered).controlSize(.large)
+                    }
                 }
                 .padding()
             }
@@ -570,6 +561,14 @@ private struct PermissionPrimer: View {
             }
         }
     }
+
+    private var primaryActionTitle: String {
+        switch source {
+        case .weather: return "Use my location"
+        case .oura where ouraMethod == .direct: return "Continue to Oura"
+        default: return "Continue"
+        }
+    }
 }
 
 private struct PrivacyPolicyView: View {
@@ -579,17 +578,18 @@ private struct PrivacyPolicyView: View {
         NavigationStack {
             List {
                 Section("Data you choose to connect") {
-                    Text("Pulseboard reads the Apple Health categories, Oura account metrics, and calendars you authorize. Health and calendar connections read records on this device. Oura account access retrieves data from Oura over the network.")
+                    Text("The app reads the Apple Health categories, Oura account metrics, and calendars you authorize. Health and calendar connections read records on this device. Oura account access retrieves data from Oura over the network.")
+                    Text("Weather is fetched from Open-Meteo using a coordinate rounded to about 1 km, either your approximate location or a city you choose. City search sends the text you type to Open-Meteo.")
                 }
                 Section("Storage and sharing") {
-                    Text("A local cache stores the metrics needed by the dashboard and widgets in their shared app container. Oura credentials are protected in the iOS Keychain. Direct Oura sign-in and credential refresh contact Oura and a secure OAuth service. Pulseboard does not sell your health or calendar data, and does not use it for advertising.")
+                    Text("A local cache stores the values needed by the app and widgets in their shared app container. Widgets may refresh weather, Apple Health, and Calendar values themselves. Oura credentials are protected in the iOS Keychain and are used only by the app. Health and calendar data are never sold or used for advertising.")
                 }
                 Section("Your controls") {
-                    Text("Choose exactly which calendars Pulseboard reads, and whether event titles appear. Calendar titles are hidden by default. Configure each Home Screen and Lock Screen widget separately with its own metric and privacy mode. Discreet widgets hide health values and event titles, including from accessibility labels.")
-                    Text("Disconnect stops use of a source and clears its cached metrics. Pulseboard attempts to remove saved Oura credentials and revoke Oura access, and reports whether those actions succeeded. Delete local data also clears cached metrics, connection state, and app preferences. These actions do not delete records from Apple Health, Oura, or your calendar accounts. Revoke device permissions in iOS Settings and review Oura authorization in your Oura account settings.")
+                    Text("Choose exactly which calendars are read, and whether event titles appear. Calendar titles are hidden by default. Each Home Screen widget uses a layout you design and its own privacy mode; Lock Screen widgets have their own metric and privacy mode. Discreet widgets hide health values and event titles, including from accessibility labels.")
+                    Text("Disconnect stops use of a source and clears its cached values. Saved Oura credentials are removed and Oura access is revoked where possible, and the result is reported. Delete local data also clears cached values, layouts, the weather location, connection state, and preferences. These actions do not delete records from Apple Health, Oura, or your calendar accounts. Revoke device permissions in iOS Settings and review Oura authorization in your Oura account settings.")
                 }
                 Section("Widget freshness") {
-                    Text("Widgets show the last successfully fetched data. Background refresh is managed by iOS and may be delayed. Open Pulseboard and refresh your sources when you need the latest available values.")
+                    Text("Widgets show the last successfully fetched data and its age in minutes. Tap the refresh tile to update. iOS decides when widgets reload in the background.")
                 }
             }
             .navigationTitle("Privacy policy")
@@ -603,326 +603,7 @@ private struct PrivacyPolicyView: View {
     }
 }
 
-private struct WidgetStudioView: View {
-    @EnvironmentObject private var connectorManager: ConnectorManager
-    @State private var surface = WidgetPreviewSurface.home
-    @State private var homeLayout = WidgetPreferences.layout
-    @State private var homeMetricID = WidgetPreferences.primaryMetricID
-    @State private var homePrivacy = WidgetPrivacyMode.showValues
-    @State private var lockLayout = WidgetLayout.balance
-    @State private var lockMetricID = ""
-    @State private var lockPrivacy = WidgetPrivacyMode.discreet
-    @State private var previewSize = WidgetPreviewSize.medium
-    @State private var isRefreshing = false
-
-    private var selectedLayout: WidgetLayout { surface == .home ? homeLayout : lockLayout }
-    private var selectedMetricID: String { surface == .home ? homeMetricID : lockMetricID }
-    private var selectedPrivacy: WidgetPrivacyMode { surface == .home ? homePrivacy : lockPrivacy }
-
-    // Only this projection reaches text or accessibility in either preview.
-    private var previewMetrics: [DashboardMetric] {
-        WidgetPreferences.orderedMetrics(
-            WidgetPrivacy.render(connectorManager.metrics, mode: selectedPrivacy),
-            layout: selectedLayout,
-            primaryMetricID: selectedMetricID
-        )
-    }
-
-    private var isBusy: Bool {
-        isRefreshing || connectorManager.isDeletingLocalData ||
-        connectorManager.activities.values.contains { $0.isBusy }
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Text("Preview with your data").font(.headline)
-                    Picker("Preview screen", selection: $surface) {
-                        ForEach(WidgetPreviewSurface.allCases) { screen in
-                            Text(screen.rawValue).tag(screen)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    if surface == .home {
-                        Picker("Preview size", selection: $previewSize) {
-                            ForEach(WidgetPreviewSize.allCases) { size in
-                                Text(size.rawValue).tag(size)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        WidgetPreview(
-                            metrics: previewMetrics,
-                            layout: selectedLayout,
-                            size: previewSize,
-                            privacyMode: selectedPrivacy,
-                            isLoading: isBusy
-                        )
-                        .frame(maxWidth: previewSize == .small ? 280 : .infinity)
-                        .frame(maxWidth: .infinity)
-                    } else {
-                        LockScreenPreview(
-                            metrics: previewMetrics,
-                            privacyMode: selectedPrivacy,
-                            isLoading: isBusy
-                        )
-                    }
-
-                    previewControls
-                    SourceRefreshWarnings()
-                    if !connectorManager.metrics.isEmpty {
-                        DataFreshnessView(metrics: previewMetrics)
-                    }
-                    widgetInstructions
-                    refreshButton
-                }
-                .padding()
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationTitle("Widget studio")
-            .onChange(of: homeLayout) { _, layout in
-                WidgetPreferences.layout = layout
-            }
-            .onChange(of: homeMetricID) { _, metricID in
-                WidgetPreferences.primaryMetricID = metricID
-            }
-            .onAppear {
-                homeLayout = WidgetPreferences.layout
-                homeMetricID = WidgetPreferences.primaryMetricID
-            }
-        }
-    }
-
-    private var previewControls: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("Preview layout", selection: layoutBinding) {
-                ForEach(WidgetLayout.allCases) { layout in
-                    Text(layout.displayName).tag(layout)
-                }
-            }
-            Picker("Preview primary metric", selection: metricBinding) {
-                Text("Automatic").tag("")
-                ForEach(connectorManager.metrics) { metric in
-                    Text("\(metric.title) · \(metric.source.displayName)").tag(metric.id)
-                }
-                if !selectedMetricID.isEmpty && !connectorManager.metrics.contains(where: { $0.id == selectedMetricID }) {
-                    Text("Unavailable metric").tag(selectedMetricID)
-                }
-            }
-            Picker("Preview privacy", selection: privacyBinding) {
-                ForEach(WidgetPrivacyMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            if !selectedMetricID.isEmpty && !connectorManager.metrics.contains(where: { $0.id == selectedMetricID }) {
-                Text("Your chosen metric is unavailable. The preview uses available data until it returns.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
-            Text("Discreet hides health values and event titles. Show values reveals metrics; event titles also require permission in Calendar privacy. Lock Screen widgets default to Discreet.")
-                .font(.footnote).foregroundStyle(.secondary)
-            Label("Preview only. These controls do not change widgets you have already added.", systemImage: "info.circle")
-                .font(.footnote).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var widgetInstructions: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Configure each widget", systemImage: "slider.horizontal.3")
-                .font(.headline)
-            Text("Home Screen: touch and hold your Pulseboard widget, choose Edit Widget, then set its layout, primary metric, and privacy. Each widget keeps its own choices.")
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Lock Screen: touch and hold the Lock Screen, choose Customize, tap the Pulseboard widget, and choose its metric and privacy.")
-                .fixedSize(horizontal: false, vertical: true)
-            Text("To add a widget, touch and hold your Home Screen, choose Edit, then Add Widget and search for Pulseboard. Add Lock Screen widgets from Customize.")
-                .font(.footnote).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .foregroundStyle(.secondary)
-    }
-
-    private var refreshButton: some View {
-        Button {
-            Task {
-                isRefreshing = true
-                await connectorManager.refreshConnectedSources()
-                WidgetCenter.shared.reloadAllTimelines()
-                isRefreshing = false
-            }
-        } label: {
-            HStack {
-                if isRefreshing { ProgressView().tint(.white) }
-                Label(isRefreshing ? "Refreshing data…" : "Refresh widget data", systemImage: "arrow.clockwise")
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.borderedProminent).controlSize(.large)
-        .disabled(isBusy || connectorManager.connectedSources.isEmpty)
-    }
-
-    private var layoutBinding: Binding<WidgetLayout> {
-        Binding(
-            get: { selectedLayout },
-            set: { if surface == .home { homeLayout = $0 } else { lockLayout = $0 } }
-        )
-    }
-
-    private var metricBinding: Binding<String> {
-        Binding(
-            get: { selectedMetricID },
-            set: { if surface == .home { homeMetricID = $0 } else { lockMetricID = $0 } }
-        )
-    }
-
-    private var privacyBinding: Binding<WidgetPrivacyMode> {
-        Binding(
-            get: { selectedPrivacy },
-            set: { if surface == .home { homePrivacy = $0 } else { lockPrivacy = $0 } }
-        )
-    }
-}
-
-private enum WidgetPreviewSurface: String, CaseIterable, Identifiable {
-    case home = "Home Screen"
-    case lock = "Lock Screen"
-    var id: String { rawValue }
-}
-
-private struct LockScreenPreview: View {
-    let metrics: [DashboardMetric]
-    let privacyMode: WidgetPrivacyMode
-    let isLoading: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Lock Screen preview").font(.caption.bold())
-            if let metric = metrics.first {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: metric.symbol).accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(metric.title).font(.caption)
-                        Text(metric.value).font(.headline)
-                        Text(metric.detail).font(.caption)
-                    }
-                    .privacySensitive(privacyMode == .showValues)
-                    .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityElement(children: .combine)
-            } else if isLoading {
-                ProgressView("Refreshing data…")
-            } else {
-                Label("Connect a source to preview your widget.", systemImage: "link.badge.plus")
-                    .font(.subheadline)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-    }
-}
-
-private enum WidgetPreviewSize: String, CaseIterable, Identifiable {
-    case small = "Small"
-    case medium = "Medium"
-    var id: String { rawValue }
-}
-
-private struct WidgetPreview: View {
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    let metrics: [DashboardMetric]
-    let layout: WidgetLayout
-    let size: WidgetPreviewSize
-    let privacyMode: WidgetPrivacyMode
-    let isLoading: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("PULSEBOARD").font(.caption.bold())
-                Spacer()
-                Text(layout.displayName).font(.caption)
-                Image(systemName: layout == .schedule ? "calendar" : "sparkles")
-                    .accessibilityHidden(true)
-            }
-            if metrics.isEmpty {
-                if isLoading {
-                    ProgressView("Refreshing data…").tint(.white)
-                } else {
-                    Label("Connect a source to preview your widget.", systemImage: "link.badge.plus")
-                        .font(.subheadline)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } else if size == .small, let metric = metrics.first {
-                VStack(alignment: .leading, spacing: 6) {
-                    Image(systemName: metric.symbol).accessibilityHidden(true)
-                    Text(metric.value).font(.largeTitle.bold().monospacedDigit())
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(metric.title).font(.headline)
-                    Text(metric.detail).font(.caption).foregroundStyle(.white.opacity(0.8))
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .privacySensitive(privacyMode == .showValues)
-                .accessibilityElement(children: .combine)
-            } else {
-                LazyVGrid(
-                    columns: dynamicTypeSize.isAccessibilitySize
-                        ? [.init(.flexible())]
-                        : [.init(.flexible()), .init(.flexible())],
-                    alignment: .leading,
-                    spacing: 14
-                ) {
-                    ForEach(Array(metrics.prefix(4))) { metric in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Label(metric.title, systemImage: metric.symbol)
-                                .font(.caption).foregroundStyle(.white.opacity(0.8))
-                            Text(metric.value).font(.headline)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Text(metric.detail).font(.caption2).foregroundStyle(.white.opacity(0.8))
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .privacySensitive(privacyMode == .showValues)
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-            }
-            if !metrics.isEmpty {
-                DataFreshnessView(metrics: size == .small ? Array(metrics.prefix(1)) : Array(metrics.prefix(4)), onDarkBackground: true)
-            }
-        }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(
-            LinearGradient(colors: [.indigo, .purple], startPoint: .topLeading, endPoint: .bottomTrailing),
-            in: RoundedRectangle(cornerRadius: 24)
-        )
-    }
-}
-
-private struct DataFreshnessView: View {
-    let metrics: [DashboardMetric]
-    var onDarkBackground = false
-
-    private var freshness: DashboardFreshness { DashboardFreshness.stored(for: metrics) }
-    private var text: String {
-        if freshness.hasError { return "Refresh failed · Cached values" }
-        if freshness.hasMissingFetch { return "Waiting for a successful data refresh" }
-        guard let date = freshness.oldestFetchAt else { return "No successful refresh yet" }
-        let prefix = freshness.isStale() ? "Stale · fetched" : "Fetched"
-        return "\(prefix) \(date.formatted(.relative(presentation: .named)))"
-    }
-
-    var body: some View {
-        Label(text, systemImage: freshness.isStale() ? "clock" : "checkmark.circle")
-            .font(.footnote)
-            .foregroundStyle(onDarkBackground ? Color.white.opacity(0.8) : Color.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-    }
-}
-
-private struct SourceRefreshWarnings: View {
+struct SourceRefreshWarnings: View {
     @EnvironmentObject private var connectorManager: ConnectorManager
 
     private var failedSources: [DataSource] {

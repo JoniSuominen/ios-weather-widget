@@ -19,6 +19,7 @@ enum WidgetPrivacyMode: String, CaseIterable, Identifiable {
 /// Project source data into display-safe metrics before creating a timeline or
 /// drawing a preview. Concealed measurements must never survive in a gauge,
 /// score description, tint, accessibility label, or hidden private title.
+/// Weather is public forecast data for a coarse location and is never concealed.
 enum WidgetPrivacy {
     static func render(_ metrics: [DashboardMetric], mode: WidgetPrivacyMode) -> [DashboardMetric] {
         metrics.map { render($0, mode: mode) }
@@ -27,6 +28,20 @@ enum WidgetPrivacy {
     private static func render(_ metric: DashboardMetric, mode: WidgetPrivacyMode) -> DashboardMetric {
         if metric.source == .googleCalendar {
             return renderCalendar(metric, mode: mode)
+        }
+        if metric.source == .weather {
+            return DashboardMetric(
+                id: metric.id,
+                source: metric.source,
+                title: metric.title,
+                value: metric.value,
+                detail: metric.detail,
+                symbol: metric.symbol,
+                tint: metric.tint,
+                numericValue: metric.numericValue,
+                targetValue: metric.targetValue,
+                observedAt: metric.observedAt
+            )
         }
 
         if mode == .discreet {
@@ -70,7 +85,7 @@ enum WidgetPrivacy {
         if !hasEvent {
             detail = "Selected calendars"
         } else if let startsAt = metric.observedAt {
-            detail = startsAt.formatted(.dateTime.weekday(.abbreviated).hour().minute())
+            detail = EventTiming.startText(startsAt, now: .now)
         } else {
             detail = "Open app for schedule"
         }
@@ -82,7 +97,8 @@ enum WidgetPrivacy {
             detail: detail,
             symbol: "calendar",
             tint: "blue",
-            observedAt: hasEvent ? metric.observedAt : nil
+            observedAt: hasEvent ? metric.observedAt : nil,
+            endsAt: hasEvent ? metric.endsAt : nil
         )
     }
 

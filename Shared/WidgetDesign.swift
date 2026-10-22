@@ -1,0 +1,277 @@
+import CoreGraphics
+import Foundation
+
+/// A Home Screen widget size, divided into a grid of tile cells. Rows are
+/// about 27 pt tall in every size, enough for one line of icon and value.
+enum WidgetCanvas: String, Codable, CaseIterable, Identifiable {
+    case small
+    case medium
+    case large
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .small: return "Small"
+        case .medium: return "Medium"
+        case .large: return "Large"
+        }
+    }
+
+    var columns: Int { self == .small ? 2 : 4 }
+    var rows: Int { self == .large ? 10 : 4 }
+
+    /// Widget size on a 6.1-inch iPhone, used for in-app previews.
+    var previewSize: CGSize {
+        switch self {
+        case .small: return CGSize(width: 158, height: 158)
+        case .medium: return CGSize(width: 338, height: 158)
+        case .large: return CGSize(width: 338, height: 354)
+        }
+    }
+
+    static let contentMargin: CGFloat = 16
+    static let tileSpacing: CGFloat = 6
+}
+
+enum TileStyle: String, Codable, CaseIterable, Identifiable {
+    /// An icon or short label beside the value.
+    case standard
+    /// Only the value, for people who know where each tile sits.
+    case valueOnly
+
+    var id: String { rawValue }
+}
+
+/// One item placed on the widget grid. Column and row are zero-based; width
+/// and height count cells. The sync tile refreshes data and shows its age.
+struct WidgetTile: Codable, Identifiable, Hashable {
+    static let syncID = "sync"
+
+    var id: UUID
+    var metricID: String
+    var column: Int
+    var row: Int
+    var width: Int
+    var height: Int
+    var style: TileStyle
+
+    init(
+        id: UUID = UUID(),
+        metricID: String,
+        column: Int,
+        row: Int,
+        width: Int = 1,
+        height: Int = 1,
+        style: TileStyle = .standard
+    ) {
+        self.id = id
+        self.metricID = metricID
+        self.column = column
+        self.row = row
+        self.width = width
+        self.height = height
+        self.style = style
+    }
+
+    var isSync: Bool { metricID == Self.syncID }
+    var endColumn: Int { column + width }
+    var endRow: Int { row + height }
+
+    func overlaps(_ other: WidgetTile) -> Bool {
+        column < other.endColumn && other.column < endColumn &&
+            row < other.endRow && other.row < endRow
+    }
+}
+
+struct WidgetDesign: Codable, Identifiable, Hashable {
+    var id: String
+    var name: String
+    var canvas: WidgetCanvas
+    var tiles: [WidgetTile]
+
+    func fits(_ tile: WidgetTile, in canvas: WidgetCanvas) -> Bool {
+        tile.column >= 0 && tile.row >= 0 && tile.width >= 1 && tile.height >= 1 &&
+            tile.endColumn <= canvas.columns && tile.endRow <= canvas.rows
+    }
+
+    /// True when the tile stays inside this canvas without covering another tile.
+    func canPlace(_ tile: WidgetTile) -> Bool {
+        fits(tile, in: canvas) && !tiles.contains { $0.id != tile.id && $0.overlaps(tile) }
+    }
+
+    func openSlot(width: Int, height: Int) -> (column: Int, row: Int)? {
+        for row in 0..<canvas.rows {
+            for column in 0..<canvas.columns {
+                let candidate = WidgetTile(metricID: "", column: column, row: row, width: width, height: height)
+                if canPlace(candidate) { return (column, row) }
+            }
+        }
+        return nil
+    }
+
+    /// Adds a tile in the first open space. Events try a wider tile first so
+    /// the start time and title fit on one line.
+    @discardableResult
+    mutating func addTile(metricID: String) -> WidgetTile? {
+        let widths = metricID == "nextEvent" ? [min(3, canvas.columns), 2, 1] : [1]
+        for width in widths {
+            if let slot = openSlot(width: width, height: 1) {
+                let tile = WidgetTile(metricID: metricID, column: slot.column, row: slot.row, width: width)
+                tiles.append(tile)
+                return tile
+            }
+        }
+        return nil
+    }
+
+    /// Applies a moved or resized tile only when it still fits without overlaps.
+    @discardableResult
+    mutating func update(_ tile: WidgetTile) -> Bool {
+        guard let index = tiles.firstIndex(where: { $0.id == tile.id }), canPlace(tile) else { return false }
+        tiles[index] = tile
+        return true
+    }
+
+    /// Resizes as close to the requested size as fits, never below one cell.
+    /// Returns the size actually applied.
+    @discardableResult
+    mutating func resizeTile(id: UUID, width: Int, height: Int) -> WidgetTile? {
+        guard let index = tiles.firstIndex(where: { $0.id == id }) else { return nil }
+        let tile = tiles[index]
+        let maxWidth = min(max(1, width), canvas.columns - tile.column)
+        let maxHeight = min(max(1, height), canvas.rows - tile.row)
+        guard maxWidth >= 1, maxHeight >= 1 else { return nil }
+        for candidateWidth in stride(from: maxWidth, through: 1, by: -1) {
+            for candidateHeight in stride(from: maxHeight, through: 1, by: -1) {
+                var candidate = tile
+                candidate.width = candidateWidth
+                candidate.height = candidateHeight
+                if canPlace(candidate) {
+                    tiles[index] = candidate
+                    return candidate
+                }
+            }
+        }
+        return nil
+    }
+
+    mutating func removeTile(id: UUID) {
+        tiles.removeAll { $0.id == id }
+    }
+
+    /// A layout chosen for another widget size shows the tiles that fit.
+    func visibleTiles(on canvas: WidgetCanvas) -> [WidgetTile] {
+        tiles.filter { fits($0, in: canvas) }
+    }
+}
+
+extension WidgetDesign {
+    /// Starter layouts shown until the first edit. Sizes follow common widget
+    /// guidance: a few glanceable values in small, more detail in large.
+    static let starters: [WidgetDesign] = WidgetCanvas.allCases.map { WidgetDesign.makeStarter($0) }
+
+    static func starter(for canvas: WidgetCanvas) -> WidgetDesign {
+        starters.first { $0.canvas == canvas } ?? makeStarter(canvas)
+    }
+
+    private static func makeStarter(_ canvas: WidgetCanvas) -> WidgetDesign {
+        func tile(_ metricID: String, _ column: Int, _ row: Int, _ width: Int = 1, _ height: Int = 1) -> WidgetTile {
+            WidgetTile(metricID: metricID, column: column, row: row, width: width, height: height)
+        }
+        let tiles: [WidgetTile]
+        switch canvas {
+        case .small:
+            tiles = [
+                tile("temperature", 0, 0, 1, 2), tile("uv", 1, 0, 1, 2),
+                tile("nextEvent", 0, 2, 2, 1),
+                tile("steps", 0, 3), tile(WidgetTile.syncID, 1, 3)
+            ]
+        case .medium:
+            tiles = [
+                tile("temperature", 0, 0, 2, 2), tile("uv", 2, 0, 2, 2),
+                tile("rain", 0, 2), tile("tomorrow", 1, 2), tile("steps", 2, 2), tile("sleep", 3, 2),
+                tile("nextEvent", 0, 3, 3, 1), tile(WidgetTile.syncID, 3, 3)
+            ]
+        case .large:
+            tiles = [
+                tile("temperature", 0, 0, 2, 3), tile("uv", 2, 0, 2, 3),
+                tile("rain", 0, 3, 2, 1), tile("tomorrow", 2, 3, 2, 1),
+                tile("nextEvent", 0, 4, 4, 2),
+                tile("steps", 0, 6, 2, 2), tile("sleep", 2, 6, 2, 2),
+                tile("heart", 0, 8, 2, 1), tile("readiness", 2, 8, 2, 1),
+                tile(WidgetTile.syncID, 3, 9)
+            ]
+        }
+        return WidgetDesign(id: "starter.\(canvas.rawValue)", name: canvas.displayName, canvas: canvas, tiles: tiles)
+    }
+}
+
+/// Layouts live in the shared app group so the widget extension can draw them
+/// and list them in Edit Widget.
+enum WidgetDesignStore {
+    private static let designsKey = "widget.designs"
+
+    private static var defaults: UserDefaults {
+        UserDefaults(suiteName: DashboardStore.appGroupID) ?? .standard
+    }
+
+    /// Saved layouts, or one starter layout per size before the first edit.
+    static var designs: [WidgetDesign] {
+        guard let data = defaults.data(forKey: designsKey),
+              let saved = try? JSONDecoder().decode([WidgetDesign].self, from: data) else {
+            return WidgetDesign.starters
+        }
+        return saved
+    }
+
+    static func designs(for canvas: WidgetCanvas) -> [WidgetDesign] {
+        designs.filter { $0.canvas == canvas }
+    }
+
+    static func design(id: String?) -> WidgetDesign? {
+        guard let id else { return nil }
+        return designs.first { $0.id == id }
+    }
+
+    /// A widget whose layout was deleted, or that never chose one, uses the
+    /// first layout of its size.
+    static func resolvedDesign(id: String?, for canvas: WidgetCanvas) -> WidgetDesign {
+        design(id: id) ?? designs(for: canvas).first ?? WidgetDesign.starter(for: canvas)
+    }
+
+    static func save(_ design: WidgetDesign) {
+        var all = designs
+        if let index = all.firstIndex(where: { $0.id == design.id }) {
+            all[index] = design
+        } else {
+            all.append(design)
+        }
+        write(all)
+    }
+
+    static func delete(id: String) {
+        write(designs.filter { $0.id != id })
+    }
+
+    static func newDesign(for canvas: WidgetCanvas) -> WidgetDesign {
+        let count = designs(for: canvas).count
+        var design = WidgetDesign.starter(for: canvas)
+        design.id = UUID().uuidString
+        design.name = count == 0 ? canvas.displayName : "\(canvas.displayName) \(count + 1)"
+        design.tiles = design.tiles.map { tile in
+            var copy = tile
+            copy.id = UUID()
+            return copy
+        }
+        return design
+    }
+
+    static func reset() {
+        defaults.removeObject(forKey: designsKey)
+    }
+
+    private static func write(_ designs: [WidgetDesign]) {
+        defaults.set(try? JSONEncoder().encode(designs), forKey: designsKey)
+    }
+}
