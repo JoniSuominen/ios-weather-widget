@@ -46,7 +46,7 @@ OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 mkdir -p "$REPO_ROOT/build"
 ARCHIVE_STAGE="$(mktemp -d "$REPO_ROOT/build/iphone-archive.XXXXXX")"
 trap 'rm -rf "$ARCHIVE_STAGE"' EXIT
-ARCHIVE_PATH="$ARCHIVE_STAGE/Pulseboard.xcarchive"
+ARCHIVE_PATH="$ARCHIVE_STAGE/Readout.xcarchive"
 cd "$REPO_ROOT"
 xcodegen generate
 BUILD_ARGS=(archive
@@ -60,20 +60,20 @@ BUILD_ARGS=(archive
 if [[ -n "$BROKER_URL" ]]; then BUILD_ARGS+=("OURA_BROKER_URL=$BROKER_URL"); fi
 xcodebuild "${BUILD_ARGS[@]}"
 
-APP_PATH="$ARCHIVE_PATH/Products/Applications/Pulseboard.app"
+APP_PATH="$ARCHIVE_PATH/Products/Applications/Readout.app"
 WIDGET_PATH="$APP_PATH/PlugIns/WeatherUVWidget.appex"
 [[ -d "$APP_PATH" && -d "$WIDGET_PATH" ]] || { printf 'Archive is missing the app or widget extension.\n' >&2; exit 1; }
-xcrun lipo "$APP_PATH/Pulseboard" -verify_arch arm64
+xcrun lipo "$APP_PATH/Readout" -verify_arch arm64
 xcrun lipo "$WIDGET_PATH/WeatherUVWidget" -verify_arch arm64
-ditto -c -k --sequesterRsrc --keepParent "$ARCHIVE_PATH" "$OUTPUT_DIR/Pulseboard.xcarchive.zip"
+ditto -c -k --sequesterRsrc --keepParent "$ARCHIVE_PATH" "$OUTPUT_DIR/Readout.xcarchive.zip"
 (
   cd "$OUTPUT_DIR"
-  shasum -a 256 Pulseboard.xcarchive.zip > SHA256SUMS
+  shasum -a 256 Readout.xcarchive.zip > SHA256SUMS
 )
 python3 - "$OUTPUT_DIR/BUILD_INFO.json" "$ARCHIVE_PATH" <<'PY'
 import datetime, json, pathlib, plistlib, subprocess, sys
 output, archive = sys.argv[1:]
-products = pathlib.Path(archive) / 'Products/Applications/Pulseboard.app'
+products = pathlib.Path(archive) / 'Products/Applications/Readout.app'
 with (products / 'Info.plist').open('rb') as file:
     app = plistlib.load(file)
 with (products / 'PlugIns/WeatherUVWidget.appex/Info.plist').open('rb') as file:
@@ -99,5 +99,5 @@ metadata = {
 pathlib.Path(output).write_text(json.dumps(metadata, indent=2) + '\n')
 PY
 cp "$REPO_ROOT/Scripts/IPHONE_ARTIFACT.md" "$OUTPUT_DIR/INSTALLING.md"
-printf 'Unsigned iPhone archive packaged at %s\n' "$OUTPUT_DIR/Pulseboard.xcarchive.zip"
+printf 'Unsigned iPhone archive packaged at %s\n' "$OUTPUT_DIR/Readout.xcarchive.zip"
 printf 'Signing is required before iPhone installation. Read %s/INSTALLING.md\n' "$OUTPUT_DIR"

@@ -1,6 +1,6 @@
-# Pulseboard data architecture
+# Readout data architecture
 
-Pulseboard stores the current dashboard on the iPhone and shares a small snapshot with its widgets. It does not require a hosted user database or a Pulseboard account. Direct Oura access adds a network dependency and a separately operated OAuth token broker.
+Readout stores the current dashboard on the iPhone and shares a small snapshot with its widgets. It does not require a hosted user database or a Readout account. Direct Oura access adds a network dependency and a separately operated OAuth token broker.
 
 ## Data flow
 
@@ -24,7 +24,7 @@ Each widget stores its own AppIntent configuration through iOS. The timeline pro
 
 The app fetches data on launch, foreground activation, manual refresh, and when iOS grants a background refresh opportunity. A background refresh is requested after about 30 minutes, but iOS may delay it or never run it. Widget timelines reload about every 30 minutes and then refresh sources older than 10 minutes; the refresh tile refreshes every eligible source at once and reports failures. Passive reloads stay silent on failure, since Health data is unreadable while the device is locked. Widgets render cached data with the age of the oldest shown value in whole minutes, stepped by one timeline entry per minute, and identify snapshots at least an hour old as stale. Only a successful source fetch updates that age.
 
-Disconnect removes a source's local display data and stops using its credentials immediately. Oura account disconnect attempts Keychain removal and remote revocation, reporting both results. **Delete local data** clears Pulseboard's snapshots, widget layouts, weather location, calendar selections, and connection state, and attempts credential removal. Installed widget settings remain managed by iOS. A nonsecret cleanup result remains in app preferences so failed credential removal is visible after relaunch and can be retried. It does not delete records from Apple Health, Calendar, or Oura. Revoke provider permissions in iOS Settings or your Oura account when needed.
+Disconnect removes a source's local display data and stops using its credentials immediately. Oura account disconnect attempts Keychain removal and remote revocation, reporting both results. **Delete local data** clears Readout's snapshots, widget layouts, weather location, calendar selections, and connection state, and attempts credential removal. Installed widget settings remain managed by iOS. A nonsecret cleanup result remains in app preferences so failed credential removal is visible after relaunch and can be retried. It does not delete records from Apple Health, Calendar, or Oura. Revoke provider permissions in iOS Settings or your Oura account when needed.
 
 ## Operating commitments
 

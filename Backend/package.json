@@ -1,5 +1,5 @@
 {
-  "name": "pulseboard-oura-broker",
+  "name": "readout-oura-broker",
   "version": "1.0.0",
   "private": true,
   "type": "module",

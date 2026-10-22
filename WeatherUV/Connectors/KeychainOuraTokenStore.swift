@@ -21,7 +21,7 @@ struct OuraKeychainTokenStore: OuraTokenStoring {
     private let service: String
     private let account = "oura.oauth.tokens"
 
-    init(service: String = Bundle.main.bundleIdentifier ?? "com.jonisuominen.pulseboard") {
+    init(service: String = Bundle.main.bundleIdentifier ?? "com.jonisuominen.readout") {
         self.service = service
     }
 

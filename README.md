@@ -1,10 +1,10 @@
-# Pulseboard
+# Readout
 
-Pulseboard is an iOS 17 SwiftUI app that packs data from several sources into one compact Home Screen widget, so more apps fit on your first page. It combines weather and UV index, Apple Health steps and resting heart rate, Oura readiness and sleep, and your next calendar event.
+Readout is an iOS 17 SwiftUI app that packs data from several sources into one compact Home Screen widget, so more apps fit on your first page. It combines weather and UV index, Apple Health steps and resting heart rate, Oura readiness and sleep, and your next calendar event.
 
 ## Features
 
-- **Weather:** current temperature, UV index with its WHO level and today's peak, today's rain with the most likely hour, and tomorrow's average temperature, from the free [Open-Meteo](https://open-meteo.com/) API. Use your approximate location or choose a city; coordinates are rounded to about 1 km.
+- **Weather:** current temperature, UV index with its WHO level and today's peak, today's rain with the most likely hour, and tomorrow's average temperature, from the free [Open-Meteo](https://open-meteo.com/) API (data licensed CC BY 4.0, credited in the app). Use your approximate location or choose a city; coordinates are rounded to about 1 km.
 - **Tile layouts:** design small, medium, and large widget layouts on a grid in the **Widgets** tab. Drag a tile to move it and drag its corner to resize it. Large tiles show a label, value, and detail; one-row tiles show an icon and value; **Value only** drops the icon. Each Home Screen widget picks its layout in Edit Widget.
 - **Next event:** start time and title on one line ("14:30 Design sync · in 25m"), with a countdown within the hour and "Now" while it runs.
 - **Refresh tile:** a one-cell button that refreshes weather, Apple Health, and Calendar from the widget and shows the age of the oldest shown value in whole minutes. It turns orange when data is stale or a refresh failed.
@@ -28,7 +28,7 @@ xcodegen generate
 open WeatherUV.xcodeproj
 ```
 
-Choose the **WeatherUV** scheme and run on an iPhone simulator. The targets retain their original `WeatherUV` names; the app is named Pulseboard. The GitHub Actions workflow generates the project and runs the simulator checks. See [DEPLOYMENT.md](DEPLOYMENT.md) for signing, Oura setup, and the device release checklist.
+Choose the **WeatherUV** scheme and run on an iPhone simulator. The targets retain their original `WeatherUV` names; the app is named Readout. The GitHub Actions workflow generates the project and runs the simulator checks. See [DEPLOYMENT.md](DEPLOYMENT.md) for signing, Oura setup, and the device release checklist.
 
 To build and install on your own connected iPhone, add your Apple account in Xcode, then run:
 
@@ -37,7 +37,7 @@ Scripts/install-on-iphone.sh --list
 Scripts/install-on-iphone.sh --team YOUR_TEAM_ID --device YOUR_IPHONE_UDID
 ```
 
-The script signs with your Apple Developer team, installs the app and widget, and launches Pulseboard. It requires a Mac and the matching App Group/HealthKit capabilities. Add `--broker-url https://your-deployed-broker` for direct Oura access.
+The script signs with your Apple Developer team, installs the app and widget, and launches Readout. It requires a Mac and the matching App Group/HealthKit capabilities. Add `--broker-url https://your-deployed-broker` for direct Oura access.
 
 The **iPhone Build** workflow also produces a downloadable **unsigned arm64 `.xcarchive`** on pushes to `main` and by manual dispatch. It includes the widget, build metadata, and a checksum. This artifact requires Apple signing before installation; it is not an installable IPA or a TestFlight release. Download it from the workflow run's Artifacts section and read its `INSTALLING.md`.
 
@@ -45,9 +45,9 @@ The configured identifiers are:
 
 | Component | Identifier |
 | --- | --- |
-| App | `com.jonisuominen.pulseboard` |
-| Widget | `com.jonisuominen.pulseboard.widget` |
-| Shared App Group | `group.com.jonisuominen.pulseboard` |
+| App | `com.jonisuominen.readout` |
+| Widget | `com.jonisuominen.readout.widget` |
+| Shared App Group | `group.com.jonisuominen.readout` |
 
 Register these identifiers and the App Group with the signing Apple Developer team. Contributors must use identifiers they control and update both entitlements and the shared store consistently.
 
@@ -74,4 +74,4 @@ project.yml           XcodeGen project definition
 Scripts/             iPhone archive packaging and local signed installation
 ```
 
-Read [LOCAL_FIRST.md](LOCAL_FIRST.md) for the storage design and [PRIVACY.md](PRIVACY.md) for data handling. Pulseboard is available under the [MIT license](LICENSE). Release signing, a deployed Oura broker, App Store Connect setup, and physical-device acceptance testing remain the app owner's responsibility.
+Read [LOCAL_FIRST.md](LOCAL_FIRST.md) for the storage design and [PRIVACY.md](PRIVACY.md) for data handling. Readout is available under the [MIT license](LICENSE). Release signing, a deployed Oura broker, App Store Connect setup, and physical-device acceptance testing remain the app owner's responsibility.

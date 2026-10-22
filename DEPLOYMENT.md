@@ -1,4 +1,4 @@
-# Build, connect Oura, and release Pulseboard
+# Build, connect Oura, and release Readout
 
 The app and widget source are included. A signed release still needs an Apple Developer team, device testing, App Store Connect setup, and a deployed Oura broker if you want direct Oura account access. Do not publish a build with an unconfigured or unverified Oura account mode.
 
@@ -24,12 +24,12 @@ The app and widget source are included. A signed release still needs an Apple De
 
 The **iPhone Build** workflow archives the app and widget for a real arm64 iPhone on GitHub's macOS runner. It runs on pushes to `main`, the device-testing branch, and from **Actions → iPhone Build → Run workflow**. A manual run can include an optional public HTTPS Oura broker URL; the repository variable `OURA_BROKER_URL` is used if that input is empty. The workflow does not need Apple signing secrets.
 
-After the workflow succeeds, download `pulseboard-iphone-unsigned-<commit SHA>` from its **Artifacts** section. It contains `Pulseboard.xcarchive.zip`, `BUILD_INFO.json`, `SHA256SUMS`, and `INSTALLING.md`. Verify it on a Mac:
+After the workflow succeeds, download `readout-iphone-unsigned-<commit SHA>` from its **Artifacts** section. It contains `Readout.xcarchive.zip`, `BUILD_INFO.json`, `SHA256SUMS`, and `INSTALLING.md`. Verify it on a Mac:
 
 ```bash
 shasum -a 256 -c SHA256SUMS
-unzip Pulseboard.xcarchive.zip
-open Pulseboard.xcarchive
+unzip Readout.xcarchive.zip
+open Readout.xcarchive
 ```
 
 The archive opens in Xcode Organizer for inspection. It is **unsigned and cannot be installed on your iPhone** until Apple signing and provisioning are supplied. AirDrop and the iPhone Files app do not install this artifact. For a reliable local installation, check out the source commit listed in `BUILD_INFO.json` and use the signed build script below. If you already have a Mac, `Scripts/archive-iphone.sh` produces the same unsigned package under `build/iphone-artifacts`.
@@ -41,7 +41,7 @@ Apple Health mode can read Oura sleep shared by the Oura app without a broker. F
 1. Register an Oura developer application and register this callback URI exactly:
 
    ```text
-   com.jonisuominen.pulseboard://oauth/oura
+   com.jonisuominen.readout://oauth/oura
    ```
 
    If you fork the app and change the callback scheme, update the iOS URL scheme, `OuraConfiguration.callbackURL`, broker callback configuration, and Oura registration together. Oura may require application approval for access beyond its developer testing limit; check the current provider requirements before a public launch.
@@ -57,16 +57,16 @@ No live broker URL or account credentials are included in this repository. The a
 
 The configured release identifiers are:
 
-- App: `com.jonisuominen.pulseboard`
-- Widget: `com.jonisuominen.pulseboard.widget`
-- App Group: `group.com.jonisuominen.pulseboard`
+- App: `com.jonisuominen.readout`
+- Widget: `com.jonisuominen.readout.widget`
+- App Group: `group.com.jonisuominen.readout`
 
 Register them under the Apple Developer team that will distribute the app. Enable the same App Group and HealthKit for both targets; the widget reads Health data when it refreshes. Contributors must replace the identifiers consistently in `project.yml`, both entitlement files, and the shared store.
 
 1. In **Xcode → Settings → Accounts**, add the developer Apple ID.
 2. Select each target's **Signing & Capabilities**, choose the Team, and enable automatic signing. Confirm matching App Group entitlements.
 3. Connect and trust the iPhone, enable Developer Mode if requested, select it as the run destination, and press **⌘R**.
-4. Launch Pulseboard once before adding widgets. Add your Google account to iOS Calendar if you want its events to appear; Pulseboard uses EventKit rather than Google sign-in.
+4. Launch Readout once before adding widgets. Add your Google account to iOS Calendar if you want its events to appear; Readout uses EventKit rather than Google sign-in.
 
 ### Build and install from Terminal
 

@@ -2,8 +2,7 @@ import WidgetKit
 import SwiftUI
 
 struct WeatherUVWidget: Widget {
-    // Kept from earlier versions so installed widgets keep working.
-    let kind = "PulseboardWidget"
+    let kind = "ReadoutWidget"
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: HomeWidgetIntent.self, provider: Provider<HomeWidgetIntent>()) { entry in

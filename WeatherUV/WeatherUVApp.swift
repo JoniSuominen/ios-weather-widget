@@ -5,7 +5,7 @@ struct WeatherUVApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        PulseboardBackgroundRefresh.register()
+        ReadoutBackgroundRefresh.register()
     }
 
     var body: some Scene {
@@ -13,7 +13,7 @@ struct WeatherUVApp: App {
             ContentView()
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .background { PulseboardBackgroundRefresh.schedule() }
+            if phase == .background { ReadoutBackgroundRefresh.schedule() }
         }
     }
 }

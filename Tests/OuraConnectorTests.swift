@@ -24,28 +24,28 @@ final class OuraConnectorTests: XCTestCase {
         XCTAssertEqual(query.first { $0.name == "state" }?.value, "expected-state")
         XCTAssertEqual(query.first { $0.name == "code_challenge_method" }?.value, "S256")
         XCTAssertEqual(query.first { $0.name == "redirect_uri" }?.value,
-                       "com.jonisuominen.pulseboard://oauth/oura")
+                       "com.jonisuominen.readout://oauth/oura")
         XCTAssertNil(query.first { $0.name == "client_secret" })
     }
 
     func testCallbackRequiresExactRedirectStateAndSingleCode() throws {
         let request = authorizationRequest()
-        let valid = URL(string: "com.jonisuominen.pulseboard://oauth/oura?state=expected-state&code=provider-code")!
+        let valid = URL(string: "com.jonisuominen.readout://oauth/oura?state=expected-state&code=provider-code")!
         XCTAssertEqual(try request.validateCallback(valid).code, "provider-code")
         for url in [
-            "com.jonisuominen.pulseboard://oauth/oura?state=wrong&code=provider-code",
-            "com.jonisuominen.pulseboard://other/oura?state=expected-state&code=provider-code",
-            "com.jonisuominen.pulseboard://oauth/other?state=expected-state&code=provider-code",
-            "com.jonisuominen.pulseboard://oauth/oura?state=expected-state&state=expected-state&code=provider-code",
-            "com.jonisuominen.pulseboard://oauth/oura?state=expected-state&code=a&code=b",
-            "com.jonisuominen.pulseboard://oauth/oura?state=expected-state&code=provider-code#fragment"
+            "com.jonisuominen.readout://oauth/oura?state=wrong&code=provider-code",
+            "com.jonisuominen.readout://other/oura?state=expected-state&code=provider-code",
+            "com.jonisuominen.readout://oauth/other?state=expected-state&code=provider-code",
+            "com.jonisuominen.readout://oauth/oura?state=expected-state&state=expected-state&code=provider-code",
+            "com.jonisuominen.readout://oauth/oura?state=expected-state&code=a&code=b",
+            "com.jonisuominen.readout://oauth/oura?state=expected-state&code=provider-code#fragment"
         ] {
             XCTAssertThrowsError(try request.validateCallback(URL(string: url)!)) {
                 XCTAssertEqual($0 as? OuraError, .invalidCallback)
             }
         }
         XCTAssertThrowsError(try request.validateCallback(URL(string:
-            "com.jonisuominen.pulseboard://oauth/oura?state=expected-state&error=access_denied")!)) {
+            "com.jonisuominen.readout://oauth/oura?state=expected-state&error=access_denied")!)) {
             XCTAssertEqual($0 as? OuraError, .authorizationDenied)
         }
     }
@@ -118,7 +118,7 @@ final class OuraConnectorTests: XCTestCase {
         let connector = makeConnector(store: store) { request in
             log.record(request)
             if request.url!.path == "/config" {
-                return (200, #"{"client_id":"public-client","redirect_uri":"com.jonisuominen.pulseboard://oauth/oura"}"#)
+                return (200, #"{"client_id":"public-client","redirect_uri":"com.jonisuominen.readout://oauth/oura"}"#)
             }
             XCTAssertEqual(request.url!.path, "/oauth/exchange")
             let body = try JSONDecoder().decode([String: String].self, from: self.bodyData(request))

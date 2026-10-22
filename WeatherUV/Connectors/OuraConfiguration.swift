@@ -1,7 +1,7 @@
 import Foundation
 
 struct OuraConfiguration {
-    static let callbackURL = URL(string: "com.jonisuominen.pulseboard://oauth/oura")!
+    static let callbackURL = URL(string: "com.jonisuominen.readout://oauth/oura")!
     static let authorizationURL = URL(string: "https://cloud.ouraring.com/oauth/authorize")!
     static let officialAPIURL = URL(string: "https://api.ouraring.com/v2/usercollection")!
 

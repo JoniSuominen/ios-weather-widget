@@ -196,8 +196,8 @@ extension WidgetDesign {
         case .large:
             // Fills all ten rows so no band of empty space is left over.
             tiles = [
-                tile("temperature", 0, 0, 2, 4), tile("uv", 2, 0, 2, 4),
-                tile("rain", 0, 4, 2, 1), tile("tomorrow", 2, 4, 2, 1),
+                tile("temperature", 0, 0, 2, 3), tile("uv", 2, 0, 2, 3),
+                tile("rain", 0, 3, 2, 2), tile("tomorrow", 2, 3, 2, 2),
                 tile("nextEvent", 0, 5, 3, 1), tile(WidgetTile.syncID, 3, 5),
                 tile("steps", 0, 6, 2, 2), tile("sleep", 2, 6, 2, 2),
                 tile("heart", 0, 8, 2, 2), tile("readiness", 2, 8, 2, 2)

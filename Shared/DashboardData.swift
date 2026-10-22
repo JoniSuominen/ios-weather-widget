@@ -100,7 +100,7 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
 }
 
 enum DashboardStore {
-    static let appGroupID = "group.com.jonisuominen.pulseboard"
+    static let appGroupID = "group.com.jonisuominen.readout"
     private static let metricsKey = "dashboard.metrics"
     private static let sourcesKey = "dashboard.sources"
     private static let updatedAtKey = "dashboard.updatedAt"

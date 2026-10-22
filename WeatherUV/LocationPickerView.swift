@@ -19,6 +19,11 @@ struct LocationPickerView: View {
                         Label("Use my location", systemImage: "location.fill")
                     }
                 }
+                Section {
+                    // Open-Meteo data is licensed CC BY 4.0 and requires this credit.
+                    Link("Weather and city search by Open-Meteo.com", destination: URL(string: "https://open-meteo.com/")!)
+                        .font(.footnote)
+                }
                 Section("Cities") {
                     if isSearching {
                         ProgressView()

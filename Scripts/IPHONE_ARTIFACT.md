@@ -1,19 +1,19 @@
-# Pulseboard unsigned iPhone build
+# Readout unsigned iPhone build
 
-This package contains an **unsigned arm64 iOS device archive** with Pulseboard and
+This package contains an **unsigned arm64 iOS device archive** with Readout and
 its widget extension. It is not an installable IPA and cannot be installed by
 AirDrop, Files, or dragging it into an iPhone. Apple signing and provisioning are
 required before the app can run on a device.
 
 Contents:
 
-- `Pulseboard.xcarchive.zip`: the app and widget archive.
+- `Readout.xcarchive.zip`: the app and widget archive.
 - `BUILD_INFO.json`: source commit, Xcode/SDK versions, bundle IDs, and signing status.
 - `SHA256SUMS`: SHA-256 checksum for the archive ZIP.
 - `INSTALLING.md`: these instructions.
 
 On a Mac, verify the download with `shasum -a 256 -c SHA256SUMS` and unzip the
-archive. Opening `Pulseboard.xcarchive` in Xcode Organizer lets you inspect the
+archive. Opening `Readout.xcarchive` in Xcode Organizer lets you inspect the
 build. The archive has no signing identity or provisioning profiles; opening it
 does not make it installable.
 
@@ -32,7 +32,7 @@ commit on your Mac:
    access; without it, use Apple Health mode.
 
 The local script regenerates the project, builds with automatic signing, installs
-both the app and embedded widget, and launches Pulseboard. Alternatively, open the
+both the app and embedded widget, and launches Readout. Alternatively, open the
 project in Xcode, set your Team on both targets, and Run on your iPhone. Consult
 `DEPLOYMENT.md` in the repository for capabilities, Oura configuration, and testing.
 

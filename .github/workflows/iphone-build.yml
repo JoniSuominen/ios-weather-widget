@@ -41,9 +41,9 @@ jobs:
       - name: Upload unsigned device build
         uses: actions/upload-artifact@v4
         with:
-          name: pulseboard-iphone-unsigned-${{ github.sha }}
+          name: readout-iphone-unsigned-${{ github.sha }}
           path: |
-            build/iphone-artifacts/Pulseboard.xcarchive.zip
+            build/iphone-artifacts/Readout.xcarchive.zip
             build/iphone-artifacts/SHA256SUMS
             build/iphone-artifacts/BUILD_INFO.json
             build/iphone-artifacts/INSTALLING.md
@@ -55,7 +55,7 @@ jobs:
           cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
           ### Unsigned iPhone build prepared
 
-          The artifact contains an arm64 `.xcarchive` with Pulseboard and its widget,
+          The artifact contains an arm64 `.xcarchive` with Readout and its widget,
           plus a checksum and build metadata. **It cannot be installed until signed.**
 
           For your own iPhone, use `Scripts/install-on-iphone.sh` on a Mac with your

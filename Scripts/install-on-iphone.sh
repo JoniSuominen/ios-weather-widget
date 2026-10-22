@@ -6,7 +6,7 @@ usage() {
 Usage: Scripts/install-on-iphone.sh --team TEAM_ID --device DEVICE_UDID [--broker-url HTTPS_URL]
        Scripts/install-on-iphone.sh --list
 
-Build, sign, install, and launch Pulseboard and its widget on a connected iPhone.
+Build, sign, install, and launch Readout and its widget on a connected iPhone.
 Requires macOS, Xcode 15+, XcodeGen, an Apple account added in Xcode, and a trusted
 phone with Developer Mode enabled. The signing team must support this app's IDs,
 App Group, and HealthKit capability. No signing credentials are sent to GitHub.
@@ -71,7 +71,7 @@ BUILD_ARGS=(build
 if [[ -n "$BROKER_URL" ]]; then BUILD_ARGS+=("OURA_BROKER_URL=$BROKER_URL"); fi
 xcodebuild "${BUILD_ARGS[@]}"
 
-APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphoneos/Pulseboard.app"
+APP_PATH="$DERIVED_DATA/Build/Products/Debug-iphoneos/Readout.app"
 [[ -d "$APP_PATH/PlugIns/WeatherUVWidget.appex" ]] || { printf 'Signed build is missing the app or widget.\n' >&2; exit 1; }
 codesign --verify --deep --strict "$APP_PATH"
 APP_BUNDLE_ID="$(python3 - "$APP_PATH/Info.plist" <<'PY'
@@ -82,4 +82,4 @@ PY
 )"
 xcrun devicectl device install app --device "$DEVICE_ID" "$APP_PATH"
 xcrun devicectl device process launch --device "$DEVICE_ID" "$APP_BUNDLE_ID"
-printf 'Pulseboard installed and launched. Add its widgets from your Home or Lock Screen.\n'
+printf 'Readout installed and launched. Add its widgets from your Home or Lock Screen.\n'

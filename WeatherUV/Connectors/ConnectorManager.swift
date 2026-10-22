@@ -97,7 +97,7 @@ final class ConnectorManager: ObservableObject {
             }
             activities[source] = .idle
             WidgetCenter.shared.reloadAllTimelines()
-            PulseboardBackgroundRefresh.schedule()
+            ReadoutBackgroundRefresh.schedule()
         } catch { handle(error, for: source, operation: operation) }
     }
 
@@ -116,7 +116,7 @@ final class ConnectorManager: ObservableObject {
         activities[source] = .disconnecting
         synchronizeFromStore()
         WidgetCenter.shared.reloadAllTimelines()
-        if connectedSources.isEmpty { PulseboardBackgroundRefresh.cancel() }
+        if connectedSources.isEmpty { ReadoutBackgroundRefresh.cancel() }
         let result = await connector.disconnect()
         guard operationIDs[source] == operation else { return }
         record(result, for: source)
@@ -231,7 +231,7 @@ final class ConnectorManager: ObservableObject {
         disconnectResults = [:]
         dataDeletionResult = nil
         ouraConnectionMethod = .appleHealth
-        PulseboardBackgroundRefresh.cancel()
+        ReadoutBackgroundRefresh.cancel()
         WidgetCenter.shared.reloadAllTimelines()
         // Clear credentials even if the account never finished connecting.
         let result = await directOuraConnector.disconnect()

@@ -1,6 +1,6 @@
 // The broker never persists codes or tokens. Oura validates S256 PKCE and
 // consumes authorization codes / rotating refresh tokens exactly once.
-export const REDIRECT_URI = "com.jonisuominen.pulseboard://oauth/oura";
+export const REDIRECT_URI = "com.jonisuominen.readout://oauth/oura";
 const TOKEN_URL = "https://api.ouraring.com/oauth/token";
 const REVOKE_URL = "https://api.ouraring.com/oauth/revoke";
 const MAX_REQUEST_BYTES = 8192;

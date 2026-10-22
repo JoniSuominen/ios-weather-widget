@@ -267,6 +267,11 @@ private struct SourcesView: View {
                 }
                 .disabled(connectorManager.isDeletingLocalData || connectorManager.activity(for: .weather).isBusy)
             }
+            if source == .weather {
+                // Open-Meteo data is licensed CC BY 4.0 and requires this credit.
+                Link("Weather data by Open-Meteo.com", destination: URL(string: "https://open-meteo.com/")!)
+                    .font(.footnote)
+            }
             if source == .googleCalendar && connectorManager.connectedSources.contains(source) {
                 Button {
                     showingCalendarSettings = true

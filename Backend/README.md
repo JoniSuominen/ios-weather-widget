@@ -1,4 +1,4 @@
-# Pulseboard Oura OAuth broker
+# Readout Oura OAuth broker
 
 This Cloudflare Worker keeps the Oura client secret off the iPhone while supporting direct Oura access with rotating refresh tokens. It has no user database, token storage, or account system. Access and refresh tokens belong in the app's Keychain; data requests go directly from the app to Oura's V2 API.
 
@@ -9,7 +9,7 @@ Checked against the official documentation on October 10, 2026:
 - [OAuth authentication](https://cloud.ouraring.com/docs/authentication) explicitly supports **S256 PKCE**: authorization sends `code_challenge` and `code_challenge_method=S256`; token exchange sends the original `code_verifier`. Authorization code flow requires the client secret or HTTP Basic client authentication.
 - Authorization endpoint: `https://cloud.ouraring.com/oauth/authorize`. Token endpoint: `https://api.ouraring.com/oauth/token` with a UTF-8 `application/x-www-form-urlencoded` POST body.
 - Request only the `daily` scope for daily sleep, activity, and readiness. Users can decline scopes. Do not rely on the deprecated callback `scope` parameter.
-- Redirect URIs must exactly match the registered allowlist. This app uses `com.jonisuominen.pulseboard://oauth/oura`. The public docs do not prohibit custom schemes; the registration and an actual device authorization must be verified before release.
+- Redirect URIs must exactly match the registered allowlist. This app uses `com.jonisuominen.readout://oauth/oura`. The public docs do not prohibit custom schemes; the registration and an actual device authorization must be verified before release.
 - Refresh tokens are **single use**. Persist the new pair atomically before using the refreshed access token; do not issue concurrent refreshes or blindly retry a refresh after an ambiguous network failure.
 - Oura documents access-token revocation as `https://api.ouraring.com/oauth/revoke?access_token=...`. The broker requires a POST body from the app and uses that documented URL only for its upstream request.
 - [V2 API documentation](https://cloud.ouraring.com/v2/docs) says personal access tokens were deprecated in December 2025 and are unavailable. Registered applications are limited to **10 users until approved by Oura**. A user's subscription and consent can affect API access.
@@ -20,7 +20,7 @@ PKCE protects the native custom-scheme callback against code interception: an ap
 
 You need a Cloudflare account and an Oura developer application. Nothing in this directory has been deployed, and no client credentials are included.
 
-1. Register an application at [Oura API Applications](https://cloud.ouraring.com/oauth/applications), enable the `daily` scope, and register exactly `com.jonisuominen.pulseboard://oauth/oura` as its callback. Keep the client secret private.
+1. Register an application at [Oura API Applications](https://cloud.ouraring.com/oauth/applications), enable the `daily` scope, and register exactly `com.jonisuominen.readout://oauth/oura` as its callback. Keep the client secret private.
 2. Install Node.js 22 or newer, then run in this directory:
 
    ```sh
@@ -50,8 +50,8 @@ All endpoints require HTTPS. Do not append query parameters. POST endpoints acce
 | Endpoint | Request | Success |
 | --- | --- | --- |
 | `GET /health` | None | `200 {"status":"ok"}`; liveness only |
-| `GET /config` | None | `200 {"client_id":"…","redirect_uri":"com.jonisuominen.pulseboard://oauth/oura"}` |
-| `POST /oauth/exchange` | `{"code":"…","redirect_uri":"com.jonisuominen.pulseboard://oauth/oura","code_verifier":"…"}` | Token envelope below |
+| `GET /config` | None | `200 {"client_id":"…","redirect_uri":"com.jonisuominen.readout://oauth/oura"}` |
+| `POST /oauth/exchange` | `{"code":"…","redirect_uri":"com.jonisuominen.readout://oauth/oura","code_verifier":"…"}` | Token envelope below |
 | `POST /oauth/refresh` | `{"refresh_token":"…"}` | Token envelope below |
 | `POST /oauth/revoke` | `{"access_token":"…"}` | `204`, empty body |
 

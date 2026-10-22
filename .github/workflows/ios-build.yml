@@ -115,7 +115,7 @@ jobs:
           test -n "$APP"
           echo "App bundle: $APP"
           xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch "$UDID" com.jonisuominen.pulseboard
+          xcrun simctl launch "$UDID" com.jonisuominen.readout
           sleep 8
           xcrun simctl io "$UDID" screenshot app.png || true
 

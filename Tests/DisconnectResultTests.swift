@@ -158,7 +158,7 @@ final class DisconnectResultTests: XCTestCase {
         let store = OuraMemoryTokenStore()
         let connector = makeConnector(store: store, authenticator: authenticator) { request in
             XCTAssertEqual(request.url?.path, "/config", "A cancelled grant must never reach token exchange")
-            return (200, #"{"client_id":"public-client","redirect_uri":"com.jonisuominen.pulseboard://oauth/oura"}"#)
+            return (200, #"{"client_id":"public-client","redirect_uri":"com.jonisuominen.readout://oauth/oura"}"#)
         }
         let authorization = Task { try await connector.authorize() }
         await fulfillment(of: [started], timeout: 2)

@@ -1,8 +1,8 @@
 import BackgroundTasks
 import Foundation
 
-enum PulseboardBackgroundRefresh {
-    static let identifier = "com.jonisuominen.pulseboard.refresh"
+enum ReadoutBackgroundRefresh {
+    static let identifier = "com.jonisuominen.readout.refresh"
 
     static func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
