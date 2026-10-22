@@ -63,7 +63,9 @@ final class HealthKitConnector: DashboardConnector {
             tint: "mint",
             numericValue: count,
             targetValue: 10000,
-            observedAt: count == nil ? nil : .now
+            observedAt: count == nil ? nil : .now,
+            // Today's total must not be shown as tomorrow's.
+            expiresAt: Calendar.current.date(byAdding: .day, value: 1, to: start)
         )
     }
 

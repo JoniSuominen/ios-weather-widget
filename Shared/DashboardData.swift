@@ -44,6 +44,15 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
     let privateValue: String?
     /// End of a calendar event, used to show "Now" and to reload when it ends.
     let endsAt: Date?
+    /// When the value stops describing the present: midnight for today's
+    /// steps and forecast, the end time for an event. Cached metrics are
+    /// dropped from this instant on.
+    let expiresAt: Date?
+
+    func isExpired(at date: Date) -> Bool {
+        guard let expiresAt else { return false }
+        return expiresAt <= date
+    }
 
     var displayValue: String { privateValue ?? value }
 
@@ -59,7 +68,8 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         targetValue: Double? = nil,
         observedAt: Date? = nil,
         privateValue: String? = nil,
-        endsAt: Date? = nil
+        endsAt: Date? = nil,
+        expiresAt: Date? = nil
     ) {
         self.id = id
         self.source = source
@@ -73,6 +83,7 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         self.observedAt = observedAt
         self.privateValue = privateValue
         self.endsAt = endsAt
+        self.expiresAt = expiresAt
     }
 
     /// A normalized, finite goal or score. Metrics without a meaningful target
@@ -119,7 +130,7 @@ enum DashboardStore {
                   let metrics = try? JSONDecoder().decode([DashboardMetric].self, from: data) else {
                 return []
             }
-            return metrics
+            return metrics.filter { !$0.isExpired(at: .now) }
         }
         set {
             defaults.set(try? JSONEncoder().encode(newValue), forKey: metricsKey)

@@ -77,7 +77,7 @@ struct DashboardEntry: TimelineEntry {
     func scheduled(at date: Date) -> DashboardEntry {
         DashboardEntry(
             date: date,
-            metrics: metrics,
+            metrics: metrics.filter { !$0.isExpired(at: date) },
             configuration: configuration,
             design: design,
             connectedSources: connectedSources,
@@ -110,10 +110,10 @@ struct Provider<Configuration: DashboardWidgetIntent>: AppIntentTimelineProvider
         let now = Date.now
         let entry = DashboardEntry.cached(at: now, configuration: configuration.instanceConfiguration, family: context.family)
         var reloadAt = now.addingTimeInterval(Self.reloadInterval)
-        // Fetch the following event once the shown one ends.
-        if let eventEnd = entry.metrics.first(where: { $0.id == "nextEvent" })?.endsAt,
-           eventEnd > now.addingTimeInterval(60) {
-            reloadAt = min(reloadAt, eventEnd.addingTimeInterval(1))
+        // Refetch when a value expires: the next event once the shown one
+        // ends, and today's steps and forecast at midnight.
+        if let expiry = entry.metrics.compactMap(\.expiresAt).filter({ $0 > now.addingTimeInterval(60) }).min() {
+            reloadAt = min(reloadAt, expiry.addingTimeInterval(1))
         }
 
         // One entry per minute, aligned to the oldest fetch, steps the age

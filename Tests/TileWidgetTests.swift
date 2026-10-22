@@ -195,6 +195,8 @@ final class WeatherSnapshotTests: XCTestCase {
 
         XCTAssertEqual(Set(metrics.keys), ["temperature", "uv", "rain", "tomorrow"])
         XCTAssertTrue(metrics.values.allSatisfy { $0.source == .weather })
+        XCTAssertTrue(metrics.values.allSatisfy { $0.expiresAt == Date(timeIntervalSince1970: tomorrow) },
+                      "Today's forecast expires at the location's midnight")
 
         let current = try XCTUnwrap(metrics["temperature"])
         XCTAssertEqual(current.value, WeatherFormat.temperature(14.4))
@@ -241,6 +243,51 @@ final class WeatherSnapshotTests: XCTestCase {
         let location = WeatherLocation(name: "Here", latitude: 60.169_52, longitude: 24.935_45, isCurrentLocation: true)
         XCTAssertEqual(location.latitude, 60.17, accuracy: 0.000_001)
         XCTAssertEqual(location.longitude, 24.94, accuracy: 0.000_001)
+    }
+}
+
+final class MetricExpiryTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        DashboardStore.deleteLocalData()
+    }
+
+    override func tearDown() {
+        DashboardStore.deleteLocalData()
+        super.tearDown()
+    }
+
+    func testMetricIsExpiredFromItsExpiryInstant() {
+        let expiry = Date(timeIntervalSince1970: 5000)
+        let steps = metric("steps", expiresAt: expiry)
+        XCTAssertFalse(steps.isExpired(at: expiry.addingTimeInterval(-1)))
+        XCTAssertTrue(steps.isExpired(at: expiry))
+        XCTAssertFalse(metric("heart", expiresAt: nil).isExpired(at: .distantFuture))
+    }
+
+    func testEventExpiresAtItsEndInEveryPrivacyMode() {
+        let end = Date(timeIntervalSince1970: 4600)
+        let event = CalendarEventSummary(calendarID: "c", title: "Sync", startsAt: Date(timeIntervalSince1970: 1000), endsAt: end, isAllDay: false)
+        let snapshot = CalendarSnapshotBuilder.metric(for: event, showEventTitles: true)
+        XCTAssertEqual(snapshot.expiresAt, end)
+        for mode in [WidgetPrivacyMode.discreet, .showValues] {
+            XCTAssertEqual(WidgetPrivacy.render([snapshot], mode: mode).first?.expiresAt, end)
+        }
+        XCTAssertNil(CalendarSnapshotBuilder.metric(for: nil, showEventTitles: false).expiresAt)
+        XCTAssertEqual(WidgetPrivacy.render([metric("steps", expiresAt: end)], mode: .discreet).first?.expiresAt, end)
+    }
+
+    func testStoreDropsExpiredMetricsOnRead() {
+        DashboardStore.replaceMetrics([
+            metric("steps", expiresAt: Date.now.addingTimeInterval(-60)),
+            metric("heart", expiresAt: Date.now.addingTimeInterval(3600))
+        ], for: .appleHealth)
+        XCTAssertEqual(DashboardStore.metrics.map(\.id), ["heart"])
+    }
+
+    private func metric(_ id: String, expiresAt: Date?) -> DashboardMetric {
+        DashboardMetric(id: id, source: .appleHealth, title: id, value: "1", detail: "Today",
+                        symbol: "circle", tint: "mint", expiresAt: expiresAt)
     }
 }
 

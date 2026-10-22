@@ -1,5 +1,6 @@
 import AppIntents
 import SwiftUI
+import WidgetKit
 
 /// Everything a tile needs besides its own metric.
 struct TileContext {
@@ -255,15 +256,19 @@ private struct MetricTileView: View {
                 .font(.system(size: size * 0.7, weight: .heavy, design: .rounded))
                 .foregroundStyle(tint)
                 .lineLimit(1).fixedSize()
+                .widgetAccentable()
         } else if prefersText && descriptor.id == "tomorrow" {
             Text("TMRW")
                 .font(.system(size: size * 0.5, weight: .heavy, design: .rounded))
                 .foregroundStyle(tint)
                 .lineLimit(1).fixedSize()
+                .widgetAccentable()
         } else {
             Image(systemName: metric?.symbol ?? descriptor.symbol)
                 .font(.system(size: size * 0.85, weight: .medium))
                 .foregroundStyle(tint)
+                // Tinted Home Screens color indicators; values stay primary.
+                .widgetAccentable()
         }
     }
 
@@ -321,6 +326,7 @@ private struct SyncTileView: View {
         return HStack(spacing: 3 * scale) {
             Image(systemName: symbol)
                 .font(.system(size: fontSize, weight: .semibold))
+                .widgetAccentable()
             if tile.style == .standard, let age {
                 Text(age)
                     .font(.system(size: fontSize, weight: .medium).monospacedDigit())

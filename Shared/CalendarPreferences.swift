@@ -107,7 +107,8 @@ enum CalendarSnapshotBuilder {
             tint: "blue",
             observedAt: event?.startsAt,
             privateValue: privateTitle,
-            endsAt: event?.endsAt
+            endsAt: event?.endsAt,
+            expiresAt: event?.endsAt
         )
     }
 }

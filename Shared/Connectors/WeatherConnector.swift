@@ -267,7 +267,9 @@ enum WeatherSnapshotBuilder {
                 symbol: WeatherCode.symbol(for: todayCode, isDay: (current.isDay ?? 1) >= 1),
                 tint: "orange",
                 numericValue: temperature,
-                observedAt: observedAt
+                observedAt: observedAt,
+                // "Today" and "tomorrow" shift at the location's midnight.
+                expiresAt: tomorrowStart
             ))
         }
 
@@ -295,7 +297,9 @@ enum WeatherSnapshotBuilder {
                 tint: level.tint,
                 numericValue: uv,
                 targetValue: 11,
-                observedAt: observedAt
+                observedAt: observedAt,
+                // "Today" and "tomorrow" shift at the location's midnight.
+                expiresAt: tomorrowStart
             ))
         }
 
@@ -324,7 +328,9 @@ enum WeatherSnapshotBuilder {
                 symbol: "drop.fill",
                 tint: "blue",
                 numericValue: amount,
-                observedAt: observedAt
+                observedAt: observedAt,
+                // "Today" and "tomorrow" shift at the location's midnight.
+                expiresAt: tomorrowStart
             ))
         }
 
@@ -348,7 +354,9 @@ enum WeatherSnapshotBuilder {
                 symbol: WeatherCode.symbol(for: code),
                 tint: "teal",
                 numericValue: tomorrowAverage,
-                observedAt: observedAt
+                observedAt: observedAt,
+                // "Today" and "tomorrow" shift at the location's midnight.
+                expiresAt: tomorrowStart
             ))
         }
 

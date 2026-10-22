@@ -40,7 +40,8 @@ enum WidgetPrivacy {
                 tint: metric.tint,
                 numericValue: metric.numericValue,
                 targetValue: metric.targetValue,
-                observedAt: metric.observedAt
+                observedAt: metric.observedAt,
+                expiresAt: metric.expiresAt
             )
         }
 
@@ -52,7 +53,8 @@ enum WidgetPrivacy {
                 value: "Hidden",
                 detail: "Open app for value",
                 symbol: "lock.fill",
-                tint: "gray"
+                tint: "gray",
+                expiresAt: metric.expiresAt
             )
         }
 
@@ -66,7 +68,8 @@ enum WidgetPrivacy {
             tint: metric.tint,
             numericValue: metric.numericValue,
             targetValue: metric.targetValue,
-            observedAt: metric.observedAt
+            observedAt: metric.observedAt,
+            expiresAt: metric.expiresAt
         )
     }
 
@@ -98,7 +101,8 @@ enum WidgetPrivacy {
             symbol: "calendar",
             tint: "blue",
             observedAt: hasEvent ? metric.observedAt : nil,
-            endsAt: hasEvent ? metric.endsAt : nil
+            endsAt: hasEvent ? metric.endsAt : nil,
+            expiresAt: metric.expiresAt
         )
     }
 
