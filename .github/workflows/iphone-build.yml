@@ -2,7 +2,7 @@ name: iPhone Build
 
 on:
   push:
-    branches: [main, codex/privacy-iphone-testing]
+    branches: [main]
   workflow_dispatch:
     inputs:
       oura_broker_url:

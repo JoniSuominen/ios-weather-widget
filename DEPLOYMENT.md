@@ -22,7 +22,7 @@ The app and widget source are included. A signed release still needs an Apple De
 
 ## Download the iPhone device build
 
-The **iPhone Build** workflow archives the app and widget for a real arm64 iPhone on GitHub's macOS runner. It runs on pushes to `main`, the device-testing branch, and from **Actions → iPhone Build → Run workflow**. A manual run can include an optional public HTTPS Oura broker URL; the repository variable `OURA_BROKER_URL` is used if that input is empty. The workflow does not need Apple signing secrets.
+The **iPhone Build** workflow archives the app and widget for a real arm64 iPhone on GitHub's macOS runner. It runs on pushes to `main` and from **Actions → iPhone Build → Run workflow**. A manual run can include an optional public HTTPS Oura broker URL; the repository variable `OURA_BROKER_URL` is used if that input is empty. The workflow does not need Apple signing secrets.
 
 After the workflow succeeds, download `readout-iphone-unsigned-<commit SHA>` from its **Artifacts** section. It contains `Readout.xcarchive.zip`, `BUILD_INFO.json`, `SHA256SUMS`, and `INSTALLING.md`. Verify it on a Mac:
 
