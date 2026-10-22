@@ -111,14 +111,7 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
 }
 
 enum DashboardStore {
-    /// "group." plus the app's bundle ID, which is the release group
-    /// (group.com.jonisuominen.readout). Deriving it keeps app and widget on the
-    /// same group when a signing tool rewrites bundle IDs per team.
-    static let appGroupID: String = {
-        var id = Bundle.main.bundleIdentifier ?? "com.jonisuominen.readout"
-        if id.hasSuffix(".widget") { id.removeLast(".widget".count) }
-        return "group." + id
-    }()
+    static let appGroupID = "group.com.jonisuominen.readout"
     private static let metricsKey = "dashboard.metrics"
     private static let sourcesKey = "dashboard.sources"
     private static let updatedAtKey = "dashboard.updatedAt"
