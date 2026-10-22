@@ -196,7 +196,10 @@ private struct MetricTileView: View {
     /// happens relative to now.
     @ViewBuilder
     private var event: some View {
-        let fontSize = tile.height == 1 ? clamp(size.height * 0.5, 11 * scale, 15 * scale) : 13.5 * scale
+        // Taller event tiles use a larger font rather than leaving empty rows.
+        let fontSize = tile.height == 1
+            ? clamp(size.height * 0.5, 11 * scale, 15 * scale)
+            : clamp(size.height * 0.3, 14 * scale, 20 * scale)
         if let metric, let start = metric.observedAt {
             let ongoing = EventTiming.isOngoing(start: start, end: metric.endsAt, now: context.now)
             if tile.width == 1 {
@@ -251,10 +254,12 @@ private struct MetricTileView: View {
             Text("UV")
                 .font(.system(size: size * 0.7, weight: .heavy, design: .rounded))
                 .foregroundStyle(tint)
+                .lineLimit(1).fixedSize()
         } else if prefersText && descriptor.id == "tomorrow" {
             Text("TMRW")
                 .font(.system(size: size * 0.5, weight: .heavy, design: .rounded))
                 .foregroundStyle(tint)
+                .lineLimit(1).fixedSize()
         } else {
             Image(systemName: metric?.symbol ?? descriptor.symbol)
                 .font(.system(size: size * 0.85, weight: .medium))
