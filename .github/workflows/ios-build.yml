@@ -54,6 +54,9 @@ jobs:
             CODE_SIGN_IDENTITY=""
 
       - name: Run iOS regression tests
+        env:
+          # Reaches the tests as WIDGET_SNAPSHOT_DIR; renders layout previews.
+          TEST_RUNNER_WIDGET_SNAPSHOT_DIR: ${{ github.workspace }}/widget-previews
         run: |
           xcodebuild test \
             -project WeatherUV.xcodeproj \
@@ -61,6 +64,14 @@ jobs:
             -destination "id=$SIMULATOR_ID" \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Upload widget previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: widget-previews
+          path: widget-previews
+          if-no-files-found: ignore
 
       - name: Upload test results
         if: always()
