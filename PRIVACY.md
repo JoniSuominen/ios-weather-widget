@@ -39,6 +39,6 @@ Oura disconnect reports local credential removal and remote revocation separatel
 
 ## Contact and changes
 
-For privacy questions, use [the repository's GitHub Issues](https://github.com/JoniSuominen/ios-weather-widget/issues). Do not post health details, calendar contents, passwords, or tokens in a public issue.
+For privacy questions, use [the repository's GitHub Issues](https://github.com/JoniSuominen/readout/issues). Do not post health details, calendar contents, passwords, or tokens in a public issue.
 
-This policy will be updated when Readout's data handling changes. Its public URL is [this privacy policy on GitHub](https://github.com/JoniSuominen/ios-weather-widget/blob/main/PRIVACY.md).
+This policy will be updated when Readout's data handling changes. Its public URL is [this privacy policy on GitHub](https://github.com/JoniSuominen/readout/blob/main/PRIVACY.md).

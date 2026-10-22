@@ -9,7 +9,7 @@ The app and widget source are included. A signed release still needs an Apple De
 
    ```bash
    brew install xcodegen
-   cd /path/to/ios-weather-widget
+   cd /path/to/readout
    xcodegen generate
    open WeatherUV.xcodeproj
    ```
@@ -105,7 +105,7 @@ These checks require execution on a real iPhone; their presence here does not me
 
 1. Complete the simulator checks, broker tests, and physical-device checklist. Resolve any outstanding CI failure.
 2. Create an App Store Connect app record with the final bundle ID. Confirm the production broker configuration is in the archive.
-3. Provide screenshots, app metadata, review instructions, and the [public privacy policy URL](https://github.com/JoniSuominen/ios-weather-widget/blob/main/PRIVACY.md). Answer App Store privacy questions based on the deployed app and broker, including the hosting platform's behavior.
+3. Provide screenshots, app metadata, review instructions, and the [public privacy policy URL](https://github.com/JoniSuominen/readout/blob/main/PRIVACY.md). Answer App Store privacy questions based on the deployed app and broker, including the hosting platform's behavior.
 4. Select **Any iOS Device (arm64)**, then **Product → Archive**. In Organizer choose **Distribute App → App Store Connect → Upload**.
 5. After processing, add TestFlight internal testers. External testers require Apple's beta review. Submit for App Store review only after the release checks pass.
 

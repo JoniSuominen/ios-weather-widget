@@ -20,7 +20,7 @@ does not make it installable.
 The reliable route to your own iPhone is to build and sign from the same source
 commit on your Mac:
 
-1. Clone/download `https://github.com/JoniSuominen/ios-weather-widget` and check out
+1. Clone/download `https://github.com/JoniSuominen/readout` and check out
    the commit recorded in `BUILD_INFO.json`.
 2. Install Xcode and XcodeGen (`brew install xcodegen`). Add your Apple account in
    Xcode → Settings → Accounts.
