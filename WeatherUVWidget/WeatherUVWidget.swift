@@ -6,8 +6,10 @@ struct WeatherUVWidget: Widget {
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: HomeWidgetIntent.self, provider: Provider<HomeWidgetIntent>()) { entry in
+            let appearance = entry.design?.appearance ?? .system
             HomeWidgetView(entry: entry)
-                .containerBackground(.background, for: .widget)
+                .widgetAppearance(appearance)
+                .containerBackground(for: .widget) { appearance.background }
         }
         .configurationDisplayName("Dashboard")
         .description("Weather, health, and your next event in one layout you design in the app.")

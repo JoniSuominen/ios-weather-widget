@@ -90,8 +90,9 @@ struct LayoutPreview: View {
         )
         .padding(WidgetCanvas.contentMargin * scale)
         .frame(width: size.width * scale, height: size.height * scale)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22 * scale, style: .continuous))
+        .background { design.appearance.previewBackground.clipShape(RoundedRectangle(cornerRadius: 22 * scale, style: .continuous)) }
         .overlay(RoundedRectangle(cornerRadius: 22 * scale, style: .continuous).stroke(Color.secondary.opacity(0.25)))
+        .widgetAppearance(design.appearance)
         .allowsHitTesting(false)
         .accessibilityElement(children: .contain)
     }
@@ -198,6 +199,18 @@ struct LayoutEditorView: View {
                         Text("Every item is already on this layout.").foregroundStyle(.secondary)
                     }
                 }
+                Section("Style") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(WidgetAppearance.allCases) { appearance in
+                                AppearanceSwatch(appearance: appearance, isSelected: design.appearance == appearance) {
+                                    design.appearance = appearance
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
                 Section("Layout") {
                     TextField("Name", text: $design.name)
                     Button("Delete layout", role: .destructive) { showingDeleteConfirmation = true }
@@ -282,12 +295,13 @@ struct LayoutEditorView: View {
         .frame(width: inner.width, height: inner.height, alignment: .topLeading)
         .coordinateSpace(name: "canvas")
         .padding(margin)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22 * scale, style: .continuous))
+        .background { design.appearance.previewBackground.clipShape(RoundedRectangle(cornerRadius: 22 * scale, style: .continuous)) }
         .overlay(
             RoundedRectangle(cornerRadius: 22 * scale, style: .continuous)
                 .stroke(borderColor, lineWidth: target == nil ? 1 : 2)
                 .animation(.easeOut(duration: 0.15), value: target?.isValid)
         )
+        .widgetAppearance(design.appearance)
         .sensoryFeedback(.selection, trigger: target?.tile)
     }
 
@@ -538,6 +552,36 @@ struct LayoutEditorView: View {
 
     private func showMessage(_ text: String?) {
         message = text
+    }
+}
+
+/// A small sample of a widget style for the style picker.
+private struct AppearanceSwatch: View {
+    let appearance: WidgetAppearance
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.clear)
+                    .background { appearance.previewBackground.clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous)) }
+                    .overlay(Text("Aa").font(.headline).widgetAppearance(appearance))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isSelected ? 3 : 1)
+                    )
+                    .frame(width: 56, height: 56)
+                Text(appearance.displayName)
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(appearance.displayName)
+        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 }
 

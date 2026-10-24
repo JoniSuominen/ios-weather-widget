@@ -14,10 +14,15 @@ final class WidgetSnapshotRenderTests: XCTestCase {
         let directory = URL(fileURLWithPath: path, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
+        let styled: [(String, WidgetDesign)] = WidgetAppearance.allCases.map { appearance in
+            var design = WidgetDesign.starter(for: .medium)
+            design.appearance = appearance
+            return ("style-\(appearance.rawValue)", design)
+        }
         let samples: [(String, WidgetDesign)] = WidgetDesign.starters.map { ("starter", $0) } + [
             ("formats", Self.formatsDesign),
             ("dense", Self.denseSmallDesign)
-        ]
+        ] + styled
         for (name, design) in samples {
             for scheme in [ColorScheme.light, .dark] {
                 let renderer = ImageRenderer(content: SnapshotFrame(design: design).environment(\.colorScheme, scheme))
@@ -77,7 +82,8 @@ private struct SnapshotFrame: View {
         )
         .padding(WidgetCanvas.contentMargin)
         .frame(width: size.width, height: size.height)
-        .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background { design.appearance.previewBackground.clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) }
+        .widgetAppearance(design.appearance)
         .padding(16)
         .background(Color(.systemGray4))
     }

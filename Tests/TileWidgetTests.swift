@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import XCTest
 @testable import WeatherUV
 
@@ -52,6 +53,30 @@ final class WidgetDesignTests: XCTestCase {
         XCTAssertTrue(design.update(moved))
         XCTAssertEqual(design.tiles.first { $0.id == second.id }?.row, 2)
         XCTAssertEqual(design.tiles.first { $0.id == first.id }?.row, 0)
+    }
+
+    func testLayoutsSavedBeforeAppearancesLoadAsSystemAndKeepAChosenStyle() throws {
+        let legacy = Data(#"{"id":"old","name":"Old","canvas":"small","tiles":[]}"#.utf8)
+        let loaded = try JSONDecoder().decode(WidgetDesign.self, from: legacy)
+        XCTAssertEqual(loaded.appearance, .system)
+
+        let unknown = Data(#"{"id":"new","name":"New","canvas":"small","tiles":[],"appearance":"neon"}"#.utf8)
+        XCTAssertEqual(try JSONDecoder().decode(WidgetDesign.self, from: unknown).appearance, .system)
+
+        var styled = WidgetDesign(id: "styled", name: "Styled", canvas: .medium, tiles: [])
+        styled.appearance = .transparent
+        let copy = try JSONDecoder().decode(WidgetDesign.self, from: JSONEncoder().encode(styled))
+        XCTAssertEqual(copy, styled)
+        XCTAssertEqual(copy.appearance, .transparent)
+    }
+
+    func testEveryAppearanceHasAName() {
+        let names = WidgetAppearance.allCases.map(\.displayName)
+        XCTAssertEqual(Set(names).count, names.count)
+        XCTAssertTrue(names.allSatisfy { !$0.isEmpty })
+        XCTAssertNil(WidgetAppearance.system.colorScheme)
+        XCTAssertEqual(WidgetAppearance.light.colorScheme, .light)
+        XCTAssertEqual(WidgetAppearance.dark.colorScheme, .dark)
     }
 
     func testNearestPlacementSnapsPastTakenCellsAndGivesUpWhenFarAway() throws {

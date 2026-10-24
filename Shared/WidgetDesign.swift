@@ -89,6 +89,11 @@ struct WidgetDesign: Codable, Identifiable, Hashable {
     var name: String
     var canvas: WidgetCanvas
     var tiles: [WidgetTile]
+    var appearance: WidgetAppearance = .system
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, canvas, tiles, appearance
+    }
 
     func fits(_ tile: WidgetTile, in canvas: WidgetCanvas) -> Bool {
         tile.column >= 0 && tile.row >= 0 && tile.width >= 1 && tile.height >= 1 &&
@@ -193,6 +198,18 @@ struct WidgetDesign: Codable, Identifiable, Hashable {
     /// A layout chosen for another widget size shows the tiles that fit.
     func visibleTiles(on canvas: WidgetCanvas) -> [WidgetTile] {
         tiles.filter { fits($0, in: canvas) }
+    }
+}
+
+extension WidgetDesign {
+    /// Layouts saved before appearances existed have none and stay on System.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        canvas = try container.decode(WidgetCanvas.self, forKey: .canvas)
+        tiles = try container.decode([WidgetTile].self, forKey: .tiles)
+        appearance = (try? container.decodeIfPresent(WidgetAppearance.self, forKey: .appearance)) ?? .system
     }
 }
 
