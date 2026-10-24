@@ -97,8 +97,9 @@ struct LayoutPreview: View {
     }
 }
 
-/// Edits one layout on its widget grid: tap a tile to select it, drag it to
-/// move, drag its corner to resize. Smaller tiles switch to a shorter format.
+/// Edits one layout on its widget grid: tap a tile to select it and see where
+/// it can go, then tap a free spot or drag the tile there. Drag its corner to
+/// resize. Smaller tiles switch to a shorter format.
 struct LayoutEditorView: View {
     @EnvironmentObject private var connectorManager: ConnectorManager
     @Environment(\.dismiss) private var dismiss
@@ -177,7 +178,7 @@ struct LayoutEditorView: View {
                     selectedTileControls(tile)
                 } else {
                     Section {
-                        Text("Tap a tile to select it. Drag a selected tile to move it, or drag its corner to resize. Smaller tiles show less: a full card, an icon and value, or just the value.")
+                        Text("Tap a tile to select it. Green spots show where it can go: tap one, or drag the tile onto it. Drag the corner to resize. Smaller tiles show less: a full card, an icon and value, or just the value.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -225,28 +226,54 @@ struct LayoutEditorView: View {
 
     // MARK: Canvas
 
+    private struct Cell: Hashable {
+        var column: Int
+        var row: Int
+    }
+
     private var editorCanvas: some View {
         let size = design.canvas.previewSize
         let margin = WidgetCanvas.contentMargin * scale
         let inner = CGSize(width: size.width * scale - 2 * margin, height: size.height * scale - 2 * margin)
         let grid = TileGridGeometry(size: inner, canvas: design.canvas, spacing: WidgetCanvas.tileSpacing * scale)
         let cells = Array(0..<(design.canvas.columns * design.canvas.rows))
+        let available = availableCells
+        let target = dropTarget
+        let borderColor: Color = target.map { $0.isValid ? Color.green : Color.red } ?? Color.secondary.opacity(0.25)
         return ZStack(alignment: .topLeading) {
             ForEach(cells, id: \.self) { index in
-                let frame = grid.frame(of: WidgetTile(metricID: "", column: index % design.canvas.columns, row: index / design.canvas.columns))
+                let cell = Cell(column: index % design.canvas.columns, row: index / design.canvas.columns)
+                let frame = grid.frame(of: WidgetTile(metricID: "", column: cell.column, row: cell.row))
+                let isAvailable = available.contains(cell)
                 RoundedRectangle(cornerRadius: 5 * scale)
-                    .strokeBorder(Color.secondary.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .fill(isAvailable ? Color.green.opacity(0.14) : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5 * scale)
+                            .strokeBorder(
+                                isAvailable ? Color.green.opacity(0.6) : Color.secondary.opacity(0.2),
+                                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                            )
+                    )
                     .frame(width: frame.width, height: frame.height)
                     .offset(x: frame.minX, y: frame.minY)
+                    .animation(.easeOut(duration: 0.15), value: isAvailable)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { selectedID = nil }
-            if let target = dropTarget {
-                let frame = grid.frame(of: target)
+            // Empty space: tap a green spot to place the selected tile there, anywhere else to deselect.
+            Color.clear
+                .frame(width: inner.width, height: inner.height)
+                .contentShape(Rectangle())
+                .gesture(SpatialTapGesture().onEnded { place(atCanvasPoint: $0.location, grid: grid, available: available) })
+            if let target {
+                let frame = grid.frame(of: target.tile)
+                let tint: Color = target.isValid ? .green : .red
                 RoundedRectangle(cornerRadius: 6 * scale)
-                    .fill((design.canPlace(target) ? Color.green : Color.red).opacity(0.18))
+                    .fill(tint.opacity(target.isValid ? 0.3 : 0.2))
+                    .overlay(RoundedRectangle(cornerRadius: 6 * scale).strokeBorder(tint, lineWidth: 2))
                     .frame(width: frame.width, height: frame.height)
                     .offset(x: frame.minX, y: frame.minY)
+                    .zIndex(0.5)
+                    .allowsHitTesting(false)
+                    .animation(.snappy(duration: 0.15), value: target.tile)
             }
             ForEach(design.tiles) { tile in
                 editableTile(tile, grid: grid)
@@ -256,13 +283,80 @@ struct LayoutEditorView: View {
         .coordinateSpace(name: "canvas")
         .padding(margin)
         .background(Color(.systemBackground), in: RoundedRectangle(cornerRadius: 22 * scale, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 22 * scale, style: .continuous).stroke(Color.secondary.opacity(0.25)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22 * scale, style: .continuous)
+                .stroke(borderColor, lineWidth: target == nil ? 1 : 2)
+                .animation(.easeOut(duration: 0.15), value: target?.isValid)
+        )
+        .sensoryFeedback(.selection, trigger: target?.tile)
     }
 
-    /// Where a moved tile would land. Resizing previews in place instead.
-    private var dropTarget: WidgetTile? {
+    /// Where a dragged tile would land. It snaps to the nearest free spot; with
+    /// none in reach it shows the blocked cell it hovers over. Resizing
+    /// previews in place instead.
+    private var dropTarget: (tile: WidgetTile, isValid: Bool)? {
         guard let drag, drag.kind == .move, let tile = design.tiles.first(where: { $0.id == drag.tileID }) else { return nil }
-        return moved(tile, by: drag.translation)
+        if let snap = snapped(tile, by: drag.translation) { return (snap, true) }
+        return (moved(tile, by: drag.translation), false)
+    }
+
+    /// Cells the selected tile could be placed on, not counting its own.
+    private var availableCells: Set<Cell> {
+        guard let tile = selectedTile else { return [] }
+        var cells = Set<Cell>()
+        for spot in design.placements(for: tile) {
+            for column in spot.column..<spot.endColumn {
+                for row in spot.row..<spot.endRow { cells.insert(Cell(column: column, row: row)) }
+            }
+        }
+        for column in tile.column..<tile.endColumn {
+            for row in tile.row..<tile.endRow { cells.remove(Cell(column: column, row: row)) }
+        }
+        return cells
+    }
+
+    /// Reach of the snap in points: a bit under a column, so a blocked cell
+    /// hands the tile to the next free one instead of refusing the drop.
+    private var snapDistance: CGFloat {
+        let pitch = TileGridGeometry(size: gridSize, canvas: design.canvas, spacing: WidgetCanvas.tileSpacing * scale).pitch
+        return 0.9 * max(pitch.width, pitch.height)
+    }
+
+    /// The free spot nearest to where a drag has carried the tile.
+    private func snapped(_ tile: WidgetTile, by translation: CGSize) -> WidgetTile? {
+        let pitch = TileGridGeometry(size: gridSize, canvas: design.canvas, spacing: WidgetCanvas.tileSpacing * scale).pitch
+        return design.nearestPlacement(
+            of: tile,
+            column: CGFloat(tile.column) + translation.width / pitch.width,
+            row: CGFloat(tile.row) + translation.height / pitch.height,
+            pitch: pitch,
+            maxDistance: snapDistance
+        )
+    }
+
+    /// Puts the selected tile on the free spot around a tap, centered on it.
+    private func place(atCanvasPoint point: CGPoint, grid: TileGridGeometry, available: Set<Cell>) {
+        let pitch = grid.pitch
+        let tappedCell = Cell(
+            column: min(max(0, Int(point.x / pitch.width)), design.canvas.columns - 1),
+            row: min(max(0, Int(point.y / pitch.height)), design.canvas.rows - 1)
+        )
+        guard let tile = selectedTile, available.contains(tappedCell) else {
+            selectedID = nil
+            return
+        }
+        let size = grid.frame(of: tile).size
+        guard let target = design.nearestPlacement(
+            of: tile,
+            column: (point.x - size.width / 2) / pitch.width,
+            row: (point.y - size.height / 2) / pitch.height,
+            pitch: pitch,
+            maxDistance: .infinity
+        ) else { return }
+        withAnimation(.snappy(duration: 0.22)) {
+            design.update(target)
+            showMessage(nil)
+        }
     }
 
     private func editableTile(_ tile: WidgetTile, grid: TileGridGeometry) -> some View {
@@ -295,10 +389,14 @@ struct LayoutEditorView: View {
         .overlay(alignment: .bottomTrailing) {
             if isSelected { resizeHandle(tile, grid: grid) }
         }
+        // A picked-up tile rises above the others while the finger carries it.
+        .scaleEffect(isMoving ? 1.04 : 1)
+        .shadow(color: .black.opacity(isMoving ? 0.25 : 0), radius: 6 * scale, y: 3 * scale)
+        .animation(.snappy(duration: 0.15), value: isMoving)
         .offset(x: frame.minX + moveOffset.width, y: frame.minY + moveOffset.height)
-        .zIndex(isSelected ? 1 : 0)
+        .zIndex(isMoving ? 2 : isSelected ? 1 : 0)
         .onTapGesture { selectedID = tile.id }
-        .gesture(moveGesture(tile, grid: grid), including: isSelected ? .all : .subviews)
+        .gesture(moveGesture(tile))
         .accessibilityElement(children: .combine)
         .accessibilityHint("Select to move, resize, or remove")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
@@ -331,17 +429,25 @@ struct LayoutEditorView: View {
             .accessibilityHidden(true)
     }
 
-    private func moveGesture(_ tile: WidgetTile, grid: TileGridGeometry) -> some Gesture {
+    /// Any tile can be picked up and dragged; it lands on the nearest free spot
+    /// and goes back where it was when none is in reach.
+    private func moveGesture(_ tile: WidgetTile) -> some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .named("canvas"))
             .onChanged { value in
+                if selectedID != tile.id { selectedID = tile.id }
                 drag = TileDrag(kind: .move, tileID: tile.id, translation: value.translation)
             }
             .onEnded { value in
-                let target = moved(tile, by: value.translation)
-                if target != tile {
-                    showMessage(design.update(target) ? nil : "That space is taken. Move or shrink the other tile first.")
+                let target = snapped(tile, by: value.translation)
+                withAnimation(.snappy(duration: 0.22)) {
+                    if let target {
+                        design.update(target)
+                        showMessage(nil)
+                    } else {
+                        showMessage("No free space there. Drop it on a green spot, or shrink or remove a tile first.")
+                    }
+                    drag = nil
                 }
-                drag = nil
             }
     }
 
@@ -372,6 +478,11 @@ struct LayoutEditorView: View {
     @ViewBuilder
     private func selectedTileControls(_ tile: WidgetTile) -> some View {
         Section(name(of: tile)) {
+            Text(availableCells.isEmpty
+                ? "No free spot for this tile. Shrink or remove another tile first."
+                : "Tap a green spot or drag the tile onto one to move it.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             Stepper(
                 "Width: \(tile.width)",
                 onIncrement: { resize(tile, width: tile.width + 1, height: tile.height) },

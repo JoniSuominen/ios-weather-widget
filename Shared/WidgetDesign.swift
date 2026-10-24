@@ -100,6 +100,36 @@ struct WidgetDesign: Codable, Identifiable, Hashable {
         fits(tile, in: canvas) && !tiles.contains { $0.id != tile.id && $0.overlaps(tile) }
     }
 
+    /// Every free position for a tile of this size, ignoring the tile's own
+    /// current cells.
+    func placements(for tile: WidgetTile) -> [WidgetTile] {
+        var found: [WidgetTile] = []
+        for row in stride(from: 0, through: canvas.rows - tile.height, by: 1) {
+            for column in stride(from: 0, through: canvas.columns - tile.width, by: 1) {
+                var candidate = tile
+                candidate.column = column
+                candidate.row = row
+                if canPlace(candidate) { found.append(candidate) }
+            }
+        }
+        return found
+    }
+
+    /// The free position closest to a wanted top-left corner, given in
+    /// fractional cells. `pitch` is one cell plus its gap in points, so a
+    /// short row weighs less than a wide column. Nil when nothing free lies
+    /// within `maxDistance` points.
+    func nearestPlacement(of tile: WidgetTile, column: CGFloat, row: CGFloat, pitch: CGSize, maxDistance: CGFloat) -> WidgetTile? {
+        var best: (tile: WidgetTile, distance: CGFloat)?
+        for candidate in placements(for: tile) {
+            let distance = hypot((CGFloat(candidate.column) - column) * pitch.width, (CGFloat(candidate.row) - row) * pitch.height)
+            if distance <= maxDistance, distance < (best?.distance ?? .infinity) {
+                best = (candidate, distance)
+            }
+        }
+        return best?.tile
+    }
+
     func openSlot(width: Int, height: Int) -> (column: Int, row: Int)? {
         for row in 0..<canvas.rows {
             for column in 0..<canvas.columns {

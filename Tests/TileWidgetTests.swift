@@ -54,6 +54,37 @@ final class WidgetDesignTests: XCTestCase {
         XCTAssertEqual(design.tiles.first { $0.id == first.id }?.row, 0)
     }
 
+    func testNearestPlacementSnapsPastTakenCellsAndGivesUpWhenFarAway() throws {
+        let design = WidgetDesign(id: "test", name: "Test", canvas: .medium, tiles: [
+            WidgetTile(metricID: "steps", column: 1, row: 0),
+            WidgetTile(metricID: "uv", column: 3, row: 0)
+        ])
+        let moving = WidgetTile(metricID: "sleep", column: 0, row: 1)
+        let pitch = CGSize(width: 70, height: 30)
+
+        // Dropped on the taken cell (1, 0): the closest free cell below it wins.
+        let snapped = try XCTUnwrap(design.nearestPlacement(of: moving, column: 1, row: 0, pitch: pitch, maxDistance: 60))
+        XCTAssertEqual([snapped.column, snapped.row], [1, 1])
+
+        // A cell that is already free stays where it was dropped.
+        let exact = try XCTUnwrap(design.nearestPlacement(of: moving, column: 2, row: 0, pitch: pitch, maxDistance: 60))
+        XCTAssertEqual([exact.column, exact.row], [2, 0])
+
+        XCTAssertNil(design.nearestPlacement(of: moving, column: 20, row: 20, pitch: pitch, maxDistance: 60))
+    }
+
+    func testPlacementsListOnlyFreeSpotsAndIgnoreTheTilesOwnCells() {
+        let design = WidgetDesign(id: "test", name: "Test", canvas: .small, tiles: [
+            WidgetTile(metricID: "steps", column: 0, row: 0, width: 2, height: 2),
+            WidgetTile(metricID: "uv", column: 0, row: 2)
+        ])
+        let wide = design.tiles[0]
+        let spots = design.placements(for: wide).map { [$0.column, $0.row] }
+        XCTAssertTrue(spots.contains([0, 0]), "its own position stays valid")
+        XCTAssertFalse(spots.contains([0, 1]), "would cover the tile at (0, 2)")
+        XCTAssertTrue(design.placements(for: WidgetTile(metricID: "x", column: 0, row: 0, width: 3)).isEmpty)
+    }
+
     func testResizeGrowsAsFarAsFreeSpaceAllowsAndNeverBelowOneCell() {
         var design = WidgetDesign(id: "test", name: "Test", canvas: .medium, tiles: [
             WidgetTile(metricID: "steps", column: 0, row: 0),

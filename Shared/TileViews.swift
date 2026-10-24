@@ -27,6 +27,11 @@ struct TileGridGeometry {
         cellHeight = max(0, (size.height - spacing * CGFloat(canvas.rows - 1)) / CGFloat(canvas.rows))
     }
 
+    /// One cell plus its gap: how far a tile moves to cross a cell.
+    var pitch: CGSize {
+        CGSize(width: max(1, cellWidth + spacing), height: max(1, cellHeight + spacing))
+    }
+
     func frame(of tile: WidgetTile) -> CGRect {
         CGRect(
             x: CGFloat(tile.column) * (cellWidth + spacing),
