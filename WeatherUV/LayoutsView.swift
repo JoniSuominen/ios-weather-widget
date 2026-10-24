@@ -415,12 +415,28 @@ struct LayoutEditorView: View {
 
     private func editableTile(_ tile: WidgetTile, grid: TileGridGeometry) -> some View {
         let isSelected = tile.id == selectedID
+        return tileBody(tile, grid: grid, isSelected: isSelected)
+            .onTapGesture { selectedID = tile.id }
+            .gesture(moveGesture(tile))
+            .modifier(TileAccessibility(
+                value: "\(position(of: tile)), \(tile.width) by \(tile.height)",
+                isSelected: isSelected,
+                move: { columns, rows, direction in nudge(tile, columns: columns, rows: rows, direction: direction) }
+            ))
+    }
+
+    private func tileBody(_ tile: WidgetTile, grid: TileGridGeometry, isSelected: Bool) -> some View {
         let isMoving = drag?.kind == .move && drag?.tileID == tile.id
         let isResizing = drag?.kind == .resize && drag?.tileID == tile.id
         let shown = isResizing ? resized(tile, by: drag?.translation ?? .zero) : tile
         let frame = grid.frame(of: shown)
         let moveOffset: CGSize = isMoving ? (drag?.translation ?? .zero) : .zero
         let blocked = isResizing && !design.canPlace(shown)
+        let fill: Color = isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08)
+        let outline: Color = blocked ? .red : isSelected ? .accentColor : .clear
+        let lift: CGFloat = isMoving ? 1.04 : 1
+        let shadow: Double = isMoving ? 0.25 : 0
+        let layer: Double = isMoving ? 2 : isSelected ? 1 : 0
         return TileView(
             tile: shown,
             metric: shownMetrics.first { $0.id == tile.metricID },
@@ -430,35 +446,19 @@ struct LayoutEditorView: View {
         )
         .padding(.horizontal, 3 * scale)
         .frame(width: frame.width, height: frame.height)
-        .background(
-            RoundedRectangle(cornerRadius: 6 * scale)
-                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6 * scale)
-                .stroke(blocked ? Color.red : isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
+        .background(RoundedRectangle(cornerRadius: 6 * scale).fill(fill))
+        .overlay(RoundedRectangle(cornerRadius: 6 * scale).stroke(outline, lineWidth: 2))
         .contentShape(Rectangle())
         // Outside the content shape so the handle stays tappable past the tile's edge.
         .overlay(alignment: .bottomTrailing) {
             if isSelected { resizeHandle(tile, grid: grid) }
         }
         // A picked-up tile rises above the others while the finger carries it.
-        .scaleEffect(isMoving ? 1.04 : 1)
-        .shadow(color: .black.opacity(isMoving ? 0.25 : 0), radius: 6 * scale, y: 3 * scale)
+        .scaleEffect(lift)
+        .shadow(color: .black.opacity(shadow), radius: 6 * scale, y: 3 * scale)
         .animation(quickAnimation, value: isMoving)
         .offset(x: frame.minX + moveOffset.width, y: frame.minY + moveOffset.height)
-        .zIndex(isMoving ? 2 : isSelected ? 1 : 0)
-        .onTapGesture { selectedID = tile.id }
-        .gesture(moveGesture(tile))
-        .accessibilityElement(children: .combine)
-        .accessibilityValue("\(position(of: tile)), \(tile.width) by \(tile.height)")
-        .accessibilityHint("Select, then use the actions to move it, or the controls below to resize or remove it")
-        .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
-        .accessibilityAction(named: "Move left") { nudge(tile, columns: -1, rows: 0, direction: "left") }
-        .accessibilityAction(named: "Move right") { nudge(tile, columns: 1, rows: 0, direction: "right") }
-        .accessibilityAction(named: "Move up") { nudge(tile, columns: 0, rows: -1, direction: "up") }
-        .accessibilityAction(named: "Move down") { nudge(tile, columns: 0, rows: 1, direction: "down") }
+        .zIndex(layer)
     }
 
     private func resizeHandle(_ tile: WidgetTile, grid: TileGridGeometry) -> some View {
@@ -598,6 +598,27 @@ struct LayoutEditorView: View {
     private func showMessage(_ text: String?) {
         message = text
         if let text { announce(text) }
+    }
+}
+
+/// What VoiceOver says about an editor tile, and how it moves one: the
+/// canvas drag has no equivalent for people who cannot use it.
+private struct TileAccessibility: ViewModifier {
+    let value: String
+    let isSelected: Bool
+    let move: (_ columns: Int, _ rows: Int, _ direction: String) -> Void
+
+    func body(content: Content) -> some View {
+        let traits: AccessibilityTraits = isSelected ? [.isSelected, .isButton] : .isButton
+        content
+            .accessibilityElement(children: .combine)
+            .accessibilityValue(value)
+            .accessibilityHint("Select, then use the actions to move it, or the controls below to resize or remove it")
+            .accessibilityAddTraits(traits)
+            .accessibilityAction(named: "Move left") { move(-1, 0, "left") }
+            .accessibilityAction(named: "Move right") { move(1, 0, "right") }
+            .accessibilityAction(named: "Move up") { move(0, -1, "up") }
+            .accessibilityAction(named: "Move down") { move(0, 1, "down") }
     }
 }
 
