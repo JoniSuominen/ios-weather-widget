@@ -108,12 +108,14 @@ private struct MetricTileView: View {
     let context: TileContext
     let size: CGSize
 
+    @Environment(\.widgetAppearanceStyle) private var appearance
+
     private var scale: CGFloat { context.scale }
     private var value: String { metric?.value ?? "—" }
     private var title: String { metric?.title ?? descriptor.name }
     private var detail: String { metric?.detail ?? "" }
     private var showsIndicator: Bool { tile.style == .standard }
-    private var tint: Color { TileTint.color(metric?.tint ?? "gray") }
+    private var tint: Color { appearance.tint(named: metric?.tint ?? "gray") }
     /// The first part of a detail such as "Moderate · peak 6 at 13:00".
     private var shortDetail: String { detail.components(separatedBy: " · ").first ?? detail }
 
@@ -146,7 +148,7 @@ private struct MetricTileView: View {
             if tile.width >= 2 && !detail.isEmpty {
                 Text(tile.width >= 3 ? detail : shortDetail)
                     .font(.system(size: 10 * scale))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(appearance.secondaryInk)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -164,7 +166,7 @@ private struct MetricTileView: View {
             if size.height >= 56 * scale && !shortDetail.isEmpty {
                 Text(shortDetail)
                     .font(.system(size: 10 * scale))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(appearance.secondaryInk)
                     .lineLimit(tile.height >= 3 ? 2 : 1).minimumScaleFactor(0.8)
             }
             Spacer(minLength: 0)
@@ -180,7 +182,7 @@ private struct MetricTileView: View {
                     indicator(size: 11 * scale, prefersText: false)
                     Text(title)
                         .font(.system(size: 10 * scale, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(appearance.secondaryInk)
                 }
                 .lineLimit(1)
             }
@@ -190,7 +192,7 @@ private struct MetricTileView: View {
             if !detail.isEmpty {
                 Text(detail)
                     .font(.system(size: 10.5 * scale))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(appearance.secondaryInk)
                     .lineLimit(tile.height >= 3 ? 2 : 1)
             }
             Spacer(minLength: 0)
@@ -231,7 +233,7 @@ private struct MetricTileView: View {
                     if showsIndicator { indicator(size: fontSize, prefersText: false) }
                     (Text(when).fontWeight(.semibold)
                         + Text(" " + metric.value)
-                        + Text(relative).foregroundStyle(.secondary))
+                        + Text(relative).foregroundStyle(appearance.secondaryInk))
                         .font(.system(size: fontSize))
                         .lineLimit(tile.height)
                         .minimumScaleFactor(0.8)
@@ -244,7 +246,7 @@ private struct MetricTileView: View {
                 if showsIndicator { indicator(size: fontSize, prefersText: false) }
                 Text(metric == nil ? "—" : tile.width >= 2 ? "No upcoming events" : "None")
                     .font(.system(size: fontSize))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(appearance.secondaryInk)
                     .lineLimit(1).minimumScaleFactor(0.7)
                 Spacer(minLength: 0)
             }
@@ -294,6 +296,8 @@ private struct SyncTileView: View {
     let size: CGSize
     let isTrailing: Bool
 
+    @Environment(\.widgetAppearanceStyle) private var appearance
+
     private var scale: CGFloat { context.scale }
     private var freshness: DashboardFreshness { context.freshness }
     private var isStale: Bool { freshness.isStale(at: context.now) }
@@ -339,7 +343,7 @@ private struct SyncTileView: View {
                     .invalidatableContent()
             }
         }
-        .foregroundStyle(freshness.hasError || isStale ? Color.orange : Color.secondary)
+        .foregroundStyle(freshness.hasError || isStale ? AnyShapeStyle(appearance.warningColor) : appearance.secondaryInk)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTrailing ? .trailing : .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -348,6 +352,30 @@ private struct SyncTileView: View {
 }
 
 enum TileTint {
+    static let names = ["pink", "mint", "blue", "violet", "indigo", "orange", "yellow", "green", "red", "teal", "gray"]
+
+    /// Light versions of every tint, for dark gradient backgrounds. Each is at
+    /// least 4.5:1 against the gradients in `WidgetAppearance`.
+    static func brightComponents(_ name: String) -> WidgetRGB {
+        switch name {
+        case "pink": return WidgetRGB(red: 1.00, green: 0.74, blue: 0.85)
+        case "mint": return WidgetRGB(red: 0.55, green: 0.95, blue: 0.80)
+        case "blue": return WidgetRGB(red: 0.62, green: 0.84, blue: 1.00)
+        case "violet": return WidgetRGB(red: 0.86, green: 0.77, blue: 1.00)
+        case "indigo": return WidgetRGB(red: 0.76, green: 0.78, blue: 1.00)
+        case "orange": return WidgetRGB(red: 1.00, green: 0.75, blue: 0.45)
+        case "yellow": return WidgetRGB(red: 1.00, green: 0.88, blue: 0.40)
+        case "green": return WidgetRGB(red: 0.55, green: 0.95, blue: 0.60)
+        case "red": return WidgetRGB(red: 1.00, green: 0.72, blue: 0.70)
+        case "teal": return WidgetRGB(red: 0.45, green: 0.92, blue: 0.92)
+        default: return WidgetRGB(red: 0.82, green: 0.84, blue: 0.88)
+        }
+    }
+
+    static func bright(_ name: String) -> Color {
+        brightComponents(name).color
+    }
+
     static func color(_ name: String) -> Color {
         switch name {
         case "pink": return .pink

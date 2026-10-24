@@ -135,6 +135,19 @@ struct WidgetDesign: Codable, Identifiable, Hashable {
         return best?.tile
     }
 
+    /// The first free spot in a straight line from the tile, jumping over any
+    /// tiles in the way. Nil when the line reaches the edge without one.
+    func placement(of tile: WidgetTile, stepping columns: Int, _ rows: Int) -> WidgetTile? {
+        guard columns != 0 || rows != 0 else { return nil }
+        var candidate = tile
+        while true {
+            candidate.column += columns
+            candidate.row += rows
+            guard fits(candidate, in: canvas) else { return nil }
+            if canPlace(candidate) { return candidate }
+        }
+    }
+
     func openSlot(width: Int, height: Int) -> (column: Int, row: Int)? {
         for row in 0..<canvas.rows {
             for column in 0..<canvas.columns {

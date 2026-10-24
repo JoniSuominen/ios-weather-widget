@@ -70,6 +70,34 @@ final class WidgetDesignTests: XCTestCase {
         XCTAssertEqual(copy.appearance, .transparent)
     }
 
+    func testGradientAppearancesKeepTextAndTintsReadable() {
+        let gradients = WidgetAppearance.allCases.filter(\.isGradient)
+        XCTAssertFalse(gradients.isEmpty)
+        for appearance in gradients {
+            for stop in appearance.gradientStops {
+                XCTAssertGreaterThanOrEqual(WidgetRGB.white.contrast(with: stop), 7, "primary text on \(appearance)")
+                let secondary = WidgetRGB.white.blended(over: stop, opacity: WidgetAppearance.gradientSecondaryOpacity)
+                XCTAssertGreaterThanOrEqual(secondary.contrast(with: stop), 4.5, "secondary text on \(appearance)")
+                for name in TileTint.names {
+                    XCTAssertGreaterThanOrEqual(TileTint.brightComponents(name).contrast(with: stop), 4.5, "\(name) on \(appearance)")
+                }
+            }
+        }
+    }
+
+    func testNudgeJumpsOverTilesAndStopsAtTheEdge() throws {
+        let design = WidgetDesign(id: "test", name: "Test", canvas: .medium, tiles: [
+            WidgetTile(metricID: "steps", column: 0, row: 0),
+            WidgetTile(metricID: "uv", column: 1, row: 0)
+        ])
+        let steps = design.tiles[0]
+        let right = try XCTUnwrap(design.placement(of: steps, stepping: 1, 0))
+        XCTAssertEqual([right.column, right.row], [2, 0], "skips the tile at (1, 0)")
+        XCTAssertEqual(design.placement(of: steps, stepping: 0, 1)?.row, 1)
+        XCTAssertNil(design.placement(of: steps, stepping: -1, 0), "already at the left edge")
+        XCTAssertNil(design.placement(of: steps, stepping: 0, 0))
+    }
+
     func testEveryAppearanceHasAName() {
         let names = WidgetAppearance.allCases.map(\.displayName)
         XCTAssertEqual(Set(names).count, names.count)

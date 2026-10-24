@@ -104,6 +104,7 @@ struct LayoutPreview: View {
 struct LayoutEditorView: View {
     @EnvironmentObject private var connectorManager: ConnectorManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var design: WidgetDesign
     @State private var selectedID: UUID?
     @State private var drag: TileDrag?
@@ -141,6 +142,10 @@ struct LayoutEditorView: View {
     private var selectedTile: WidgetTile? {
         design.tiles.first { $0.id == selectedID }
     }
+
+    /// Motion for snapping and highlights. None when Reduce Motion is on.
+    private var snapAnimation: Animation? { reduceMotion ? nil : .snappy(duration: 0.22) }
+    private var quickAnimation: Animation? { reduceMotion ? nil : .easeOut(duration: 0.15) }
 
     private var shownMetrics: [DashboardMetric] {
         WidgetPrivacy.render(connectorManager.connectedSources.isEmpty ? DashboardMetric.defaults : connectorManager.metrics, mode: .showValues)
@@ -258,18 +263,19 @@ struct LayoutEditorView: View {
                 let cell = Cell(column: index % design.canvas.columns, row: index / design.canvas.columns)
                 let frame = grid.frame(of: WidgetTile(metricID: "", column: cell.column, row: cell.row))
                 let isAvailable = available.contains(cell)
+                // Free spots get a solid outline and a fill; the rest stay dashed, so color is not the only cue.
                 RoundedRectangle(cornerRadius: 5 * scale)
                     .fill(isAvailable ? Color.green.opacity(0.14) : Color.clear)
                     .overlay(
                         RoundedRectangle(cornerRadius: 5 * scale)
                             .strokeBorder(
-                                isAvailable ? Color.green.opacity(0.6) : Color.secondary.opacity(0.2),
-                                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                                isAvailable ? Color.green.opacity(0.7) : Color.secondary.opacity(0.2),
+                                style: isAvailable ? StrokeStyle(lineWidth: 1.5) : StrokeStyle(lineWidth: 1, dash: [3, 3])
                             )
                     )
                     .frame(width: frame.width, height: frame.height)
                     .offset(x: frame.minX, y: frame.minY)
-                    .animation(.easeOut(duration: 0.15), value: isAvailable)
+                    .animation(quickAnimation, value: isAvailable)
             }
             // Empty space: tap a green spot to place the selected tile there, anywhere else to deselect.
             Color.clear
@@ -279,14 +285,24 @@ struct LayoutEditorView: View {
             if let target {
                 let frame = grid.frame(of: target.tile)
                 let tint: Color = target.isValid ? .green : .red
+                // A check on a solid outline marks a spot that works; a cross on a dashed one marks a blocked spot.
                 RoundedRectangle(cornerRadius: 6 * scale)
                     .fill(tint.opacity(target.isValid ? 0.3 : 0.2))
-                    .overlay(RoundedRectangle(cornerRadius: 6 * scale).strokeBorder(tint, lineWidth: 2))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6 * scale)
+                            .strokeBorder(tint, style: target.isValid ? StrokeStyle(lineWidth: 2) : StrokeStyle(lineWidth: 2, dash: [5, 3]))
+                    )
+                    .overlay(
+                        Image(systemName: target.isValid ? "checkmark" : "xmark")
+                            .font(.system(size: 11 * scale, weight: .bold))
+                            .foregroundStyle(tint)
+                    )
                     .frame(width: frame.width, height: frame.height)
                     .offset(x: frame.minX, y: frame.minY)
                     .zIndex(0.5)
                     .allowsHitTesting(false)
-                    .animation(.snappy(duration: 0.15), value: target.tile)
+                    .accessibilityHidden(true)
+                    .animation(quickAnimation, value: target.tile)
             }
             ForEach(design.tiles) { tile in
                 editableTile(tile, grid: grid)
@@ -299,7 +315,7 @@ struct LayoutEditorView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 22 * scale, style: .continuous)
                 .stroke(borderColor, lineWidth: target == nil ? 1 : 2)
-                .animation(.easeOut(duration: 0.15), value: target?.isValid)
+                .animation(quickAnimation, value: target?.isValid)
         )
         .widgetAppearance(design.appearance)
         .sensoryFeedback(.selection, trigger: target?.tile)
@@ -367,10 +383,34 @@ struct LayoutEditorView: View {
             pitch: pitch,
             maxDistance: .infinity
         ) else { return }
-        withAnimation(.snappy(duration: 0.22)) {
+        withAnimation(snapAnimation) {
             design.update(target)
             showMessage(nil)
         }
+        if target != tile { announce("Moved to \(position(of: target))") }
+    }
+
+    /// Read aloud by VoiceOver, which cannot see the move happen.
+    private func announce(_ text: String) {
+        AccessibilityNotification.Announcement(text).post()
+    }
+
+    private func position(of tile: WidgetTile) -> String {
+        "column \(tile.column + 1), row \(tile.row + 1)"
+    }
+
+    /// Moves a tile one step in a direction, jumping over tiles in the way.
+    /// This is how VoiceOver and Switch Control users reposition tiles.
+    private func nudge(_ tile: WidgetTile, columns: Int, rows: Int, direction: String) {
+        guard let target = design.placement(of: tile, stepping: columns, rows) else {
+            showMessage("Cannot move \(direction). No free space that way.")
+            return
+        }
+        withAnimation(snapAnimation) {
+            design.update(target)
+            showMessage(nil)
+        }
+        announce("Moved \(direction) to \(position(of: target))")
     }
 
     private func editableTile(_ tile: WidgetTile, grid: TileGridGeometry) -> some View {
@@ -406,14 +446,19 @@ struct LayoutEditorView: View {
         // A picked-up tile rises above the others while the finger carries it.
         .scaleEffect(isMoving ? 1.04 : 1)
         .shadow(color: .black.opacity(isMoving ? 0.25 : 0), radius: 6 * scale, y: 3 * scale)
-        .animation(.snappy(duration: 0.15), value: isMoving)
+        .animation(quickAnimation, value: isMoving)
         .offset(x: frame.minX + moveOffset.width, y: frame.minY + moveOffset.height)
         .zIndex(isMoving ? 2 : isSelected ? 1 : 0)
         .onTapGesture { selectedID = tile.id }
         .gesture(moveGesture(tile))
         .accessibilityElement(children: .combine)
-        .accessibilityHint("Select to move, resize, or remove")
+        .accessibilityValue("\(position(of: tile)), \(tile.width) by \(tile.height)")
+        .accessibilityHint("Select, then use the actions to move it, or the controls below to resize or remove it")
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
+        .accessibilityAction(named: "Move left") { nudge(tile, columns: -1, rows: 0, direction: "left") }
+        .accessibilityAction(named: "Move right") { nudge(tile, columns: 1, rows: 0, direction: "right") }
+        .accessibilityAction(named: "Move up") { nudge(tile, columns: 0, rows: -1, direction: "up") }
+        .accessibilityAction(named: "Move down") { nudge(tile, columns: 0, rows: 1, direction: "down") }
     }
 
     private func resizeHandle(_ tile: WidgetTile, grid: TileGridGeometry) -> some View {
@@ -422,9 +467,9 @@ struct LayoutEditorView: View {
             .foregroundStyle(.white)
             .frame(width: 20, height: 20)
             .background(Color.accentColor, in: Circle())
-            .frame(width: 32, height: 32)
+            .frame(width: 44, height: 44)
             .contentShape(Rectangle())
-            .offset(x: 12, y: 12)
+            .offset(x: 18, y: 18)
             .highPriorityGesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .named("canvas"))
                     .onChanged { value in
@@ -453,12 +498,12 @@ struct LayoutEditorView: View {
             }
             .onEnded { value in
                 let target = snapped(tile, by: value.translation)
-                withAnimation(.snappy(duration: 0.22)) {
+                withAnimation(snapAnimation) {
                     if let target {
                         design.update(target)
                         showMessage(nil)
                     } else {
-                        showMessage("No free space there. Drop it on a green spot, or shrink or remove a tile first.")
+                        showMessage("No free space there. Drop it on a green spot with a check, or shrink or remove a tile first.")
                     }
                     drag = nil
                 }
@@ -552,6 +597,7 @@ struct LayoutEditorView: View {
 
     private func showMessage(_ text: String?) {
         message = text
+        if let text { announce(text) }
     }
 }
 
