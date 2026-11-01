@@ -29,6 +29,21 @@ final class ConnectorManagerTests: XCTestCase {
     }
 
     @MainActor
+    func testBackgroundRefreshSkipsSourcesAWidgetJustFetched() async {
+        let health = MockDashboardConnector(source: .appleHealth)
+        let calendar = MockDashboardConnector(source: .googleCalendar)
+        DashboardStore.connectedSources = [.appleHealth, .googleCalendar]
+        DashboardStore.replaceMetrics([health.metric], for: .appleHealth, fetchedAt: .now.addingTimeInterval(-3600))
+        let manager = ConnectorManager(connectors: [health, calendar], directOuraConnector: MockDashboardConnector(source: .oura))
+        // A widget timeline fetches the calendar after the app was suspended.
+        DashboardStore.replaceMetrics([calendar.metric], for: .googleCalendar, fetchedAt: .now.addingTimeInterval(-60))
+        await manager.refreshStaleSources(olderThan: 600)
+        XCTAssertEqual(health.refreshCount, 1)
+        XCTAssertEqual(calendar.refreshCount, 0)
+        XCTAssertEqual(Set(manager.metrics.map(\.source)), [.appleHealth, .googleCalendar])
+    }
+
+    @MainActor
     func testRefreshFailureKeepsCachedDataAndOriginalTimestamp() async {
         let health = MockDashboardConnector(source: .appleHealth)
         let oldDate = Date.now.addingTimeInterval(-600)

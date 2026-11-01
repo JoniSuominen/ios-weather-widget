@@ -98,7 +98,9 @@ final class ConnectorManager: ObservableObject {
             activities[source] = .idle
             WidgetCenter.shared.reloadAllTimelines()
             ReadoutBackgroundRefresh.schedule()
-        } catch { handle(error, for: source, operation: operation) }
+        } catch {
+            if handle(error, for: source, operation: operation) { WidgetCenter.shared.reloadAllTimelines() }
+        }
     }
 
     func disconnect(_ source: DataSource) async {
@@ -145,10 +147,12 @@ final class ConnectorManager: ObservableObject {
         preferences.set(method.rawValue, forKey: Self.methodKey)
     }
 
-    func refresh(_ source: DataSource) async {
+    /// Returns true when the shared cache changed: new metrics or an error.
+    @discardableResult
+    func refresh(_ source: DataSource, reloadWidgets: Bool = true) async -> Bool {
         guard !isResetting, !(source == .oura && isSwitchingOura),
               connectedSources.contains(source), let connector = connector(for: source),
-              !activity(for: source).isBusy else { return }
+              !activity(for: source).isBusy else { return false }
         let operation = UUID()
         let calendarRevision = CalendarPreferences.revision
         operationIDs[source] = operation
@@ -156,19 +160,45 @@ final class ConnectorManager: ObservableObject {
         do {
             let newMetrics = try await connector.refresh()
             try Task.checkCancellation()
-            guard canPublish(source, operation: operation, calendarRevision: calendarRevision) else { return }
+            guard canPublish(source, operation: operation, calendarRevision: calendarRevision) else { return false }
             DashboardStore.replaceMetrics(newMetrics, for: source)
             synchronizeFromStore()
             activities[source] = .idle
-            WidgetCenter.shared.reloadAllTimelines()
-        } catch { handle(error, for: source, operation: operation) }
+            if reloadWidgets { WidgetCenter.shared.reloadAllTimelines() }
+            return true
+        } catch {
+            let recorded = handle(error, for: source, operation: operation)
+            if recorded && reloadWidgets { WidgetCenter.shared.reloadAllTimelines() }
+            return recorded
+        }
     }
 
     func refreshConnectedSources() async {
-        for source in DataSource.allCases where connectedSources.contains(source) {
-            if Task.isCancelled { break }
-            await refresh(source)
+        await refreshTogether(connectedSources)
+    }
+
+    /// For background work: widgets fetch on their own, so skip sources they
+    /// or the app fetched recently.
+    func refreshStaleSources(olderThan minimumAge: TimeInterval) async {
+        reloadFromStore()
+        await refreshTogether(connectedSources.filter { isStale($0, minimumAge: minimumAge) })
+    }
+
+    /// Fetches sources side by side and reloads widgets once, not once per
+    /// source: background reloads count against the WidgetKit budget.
+    private func refreshTogether(_ sources: Set<DataSource>) async {
+        let changed = await withTaskGroup(of: Bool.self) { group in
+            for source in DataSource.allCases where sources.contains(source) {
+                group.addTask { await self.refresh(source, reloadWidgets: false) }
+            }
+            return await group.reduce(false) { $0 || $1 }
         }
+        if changed { WidgetCenter.shared.reloadAllTimelines() }
+    }
+
+    private func isStale(_ source: DataSource, minimumAge: TimeInterval) -> Bool {
+        let fetchedAt = DashboardStore.updatedAt(for: source) ?? .distantPast
+        return Date.now.timeIntervalSince(fetchedAt) >= minimumAge
     }
 
     /// Picks a city, or nil for the device location, then fetches its forecast.
@@ -211,13 +241,10 @@ final class ConnectorManager: ObservableObject {
            await health.needsAuthorizationRequest() {
             permissionsChanged = (try? await health.authorize()) != nil
         }
-        for source in DataSource.allCases where connectedSources.contains(source) {
-            guard !Task.isCancelled else { return }
-            let fetchedAt = DashboardStore.updatedAt(for: source) ?? .distantPast
-            if Date.now.timeIntervalSince(fetchedAt) >= minimumInterval || (source == .appleHealth && permissionsChanged) {
-                await refresh(source)
-            }
-        }
+        guard !Task.isCancelled else { return }
+        await refreshTogether(connectedSources.filter {
+            isStale($0, minimumAge: minimumInterval) || ($0 == .appleHealth && permissionsChanged)
+        })
     }
 
     func deleteLocalData() async {
@@ -283,15 +310,18 @@ final class ConnectorManager: ObservableObject {
         }
     }
 
-    private func handle(_ error: Error, for source: DataSource, operation: UUID) {
-        guard operationIDs[source] == operation else { return }
+    /// Returns true when the error was recorded in the shared cache, which the
+    /// caller then shows in widgets.
+    @discardableResult
+    private func handle(_ error: Error, for source: DataSource, operation: UUID) -> Bool {
+        guard operationIDs[source] == operation else { return false }
         if error is CancellationError {
             activities[source] = .idle
-        } else {
-            activities[source] = .failed(error.localizedDescription)
-            DashboardStore.recordError(error.localizedDescription, for: source)
-            WidgetCenter.shared.reloadAllTimelines()
+            return false
         }
+        activities[source] = .failed(error.localizedDescription)
+        DashboardStore.recordError(error.localizedDescription, for: source)
+        return true
     }
 
     private func synchronizeFromStore() {

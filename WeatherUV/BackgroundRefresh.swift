@@ -12,8 +12,8 @@ enum ReadoutBackgroundRefresh {
             }
             let operation = Task { @MainActor in
                 schedule()
-                await ConnectorManager.shared.refreshConnectedSources()
                 let manager = ConnectorManager.shared
+                await manager.refreshStaleSources(olderThan: WidgetDataRefresher.passiveMinimumAge)
                 let succeeded = !Task.isCancelled && manager.connectedSources.allSatisfy {
                     if case .failed = manager.activity(for: $0) { return false }
                     return true
