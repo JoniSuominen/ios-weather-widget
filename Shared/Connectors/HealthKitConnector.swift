@@ -23,9 +23,9 @@ final class HealthKitConnector: DashboardConnector {
         }
 
         async let steps = todaySteps()
-        async let restingHeartRate = latestRestingHeartRate()
-        let results = try await (steps, restingHeartRate)
-        return [results.0, results.1]
+        async let heart = heartMetrics()
+        let results = try await (steps, heart)
+        return [results.0] + results.1
     }
 
     func disconnect() async -> DisconnectResult {
@@ -33,15 +33,75 @@ final class HealthKitConnector: DashboardConnector {
         return .localOnly
     }
 
+    /// True when a type added in a newer version has not been offered to the
+    /// user yet. Only the app can show the permission sheet.
+    func needsAuthorizationRequest() async -> Bool {
+        guard HKHealthStore.isHealthDataAvailable() else { return false }
+        let status = try? await healthStore.statusForAuthorizationRequest(toShare: [], read: Self.readTypes)
+        return status == .shouldRequest
+    }
+
     private static var readTypes: Set<HKObjectType> {
         var types = Set<HKObjectType>()
         if let steps = HKObjectType.quantityType(forIdentifier: .stepCount) {
             types.insert(steps)
         }
-        if let heartRate = HKObjectType.quantityType(forIdentifier: .restingHeartRate) {
-            types.insert(heartRate)
+        for heart in HeartMetric.all {
+            if let type = HKObjectType.quantityType(forIdentifier: heart.identifier) {
+                types.insert(type)
+            }
         }
         return types
+    }
+
+    /// Heart readings a tile can show; each is its own metric so every tile
+    /// picks the one it wants. Denied types return no samples, not an error.
+    private struct HeartMetric {
+        let id: String
+        let title: String
+        let identifier: HKQuantityTypeIdentifier
+        let unit: HKUnit
+        let unitLabel: String
+
+        static let all: [HeartMetric] = [
+            .init(id: "heart", title: "Resting heart rate", identifier: .restingHeartRate,
+                  unit: .count().unitDivided(by: .minute()), unitLabel: "bpm"),
+            .init(id: "heartRate", title: "Heart rate", identifier: .heartRate,
+                  unit: .count().unitDivided(by: .minute()), unitLabel: "bpm"),
+            .init(id: "hrv", title: "HRV", identifier: .heartRateVariabilitySDNN,
+                  unit: .secondUnit(with: .milli), unitLabel: "ms"),
+            .init(id: "walkingHeartRate", title: "Walking heart rate", identifier: .walkingHeartRateAverage,
+                  unit: .count().unitDivided(by: .minute()), unitLabel: "bpm")
+        ]
+    }
+
+    private func heartMetrics() async throws -> [DashboardMetric] {
+        var metrics: [DashboardMetric] = []
+        for heart in HeartMetric.all {
+            guard let type = HKQuantityType.quantityType(forIdentifier: heart.identifier) else { continue }
+            let sample = try await latestQuantitySample(for: type)
+            let value = sample?.quantity.doubleValue(for: heart.unit)
+            metrics.append(DashboardMetric(
+                id: heart.id,
+                source: .appleHealth,
+                title: heart.title,
+                value: value.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "—",
+                detail: sample.map { "\(heart.unitLabel) · \(Self.sampleTime($0.endDate))" } ?? "No measurement found",
+                symbol: "heart.fill",
+                tint: "pink",
+                numericValue: value,
+                observedAt: sample?.endDate
+            ))
+        }
+        return metrics
+    }
+
+    /// A clock time today, else a date. Unlike "5 min ago", it stays correct
+    /// while the widget shows a cached value.
+    private static func sampleTime(_ date: Date) -> String {
+        Calendar.current.isDateInToday(date)
+            ? date.formatted(date: .omitted, time: .shortened)
+            : date.formatted(.dateTime.day().month(.abbreviated))
     }
 
     private func todaySteps() async throws -> DashboardMetric {
@@ -66,29 +126,6 @@ final class HealthKitConnector: DashboardConnector {
             observedAt: count == nil ? nil : .now,
             // Today's total must not be shown as tomorrow's.
             expiresAt: Calendar.current.date(byAdding: .day, value: 1, to: start)
-        )
-    }
-
-    private func latestRestingHeartRate() async throws -> DashboardMetric {
-        guard let type = HKQuantityType.quantityType(forIdentifier: .restingHeartRate) else {
-            throw ConnectorError.unavailable("Resting heart rate is not supported on this device.")
-        }
-        let sample = try await latestQuantitySample(for: type)
-        let unit = HKUnit.count().unitDivided(by: .minute())
-        let rate = sample?.quantity.doubleValue(for: unit)
-        let detail = sample.map {
-            "bpm · \($0.endDate.formatted(.relative(presentation: .named)))"
-        } ?? "No measurement found"
-        return DashboardMetric(
-            id: "heart",
-            source: .appleHealth,
-            title: "Resting heart rate",
-            value: rate.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "—",
-            detail: detail,
-            symbol: "heart.fill",
-            tint: "pink",
-            numericValue: rate,
-            observedAt: sample?.endDate
         )
     }
 

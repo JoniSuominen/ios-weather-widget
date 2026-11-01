@@ -14,6 +14,9 @@ extension WidgetMetricChoice: AppEnum {
             .sleep: "Sleep",
             .steps: "Steps",
             .heart: "Resting heart rate",
+            .heartRate: "Heart rate",
+            .hrv: "HRV",
+            .walkingHeartRate: "Walking heart rate",
             .nextEvent: "Next event"
         ]
     }

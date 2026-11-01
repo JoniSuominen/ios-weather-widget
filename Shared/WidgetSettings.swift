@@ -19,6 +19,9 @@ enum MetricCatalog {
         .init(id: "sleep", name: "Sleep", source: .oura, symbol: "moon.stars.fill"),
         .init(id: "steps", name: "Steps", source: .appleHealth, symbol: "figure.walk"),
         .init(id: "heart", name: "Resting heart rate", source: .appleHealth, symbol: "heart.fill"),
+        .init(id: "heartRate", name: "Heart rate", source: .appleHealth, symbol: "heart.fill"),
+        .init(id: "hrv", name: "HRV", source: .appleHealth, symbol: "heart.fill"),
+        .init(id: "walkingHeartRate", name: "Walking heart rate", source: .appleHealth, symbol: "heart.fill"),
         .init(id: "nextEvent", name: "Next event", source: .googleCalendar, symbol: "calendar")
     ]
 
@@ -27,7 +30,7 @@ enum MetricCatalog {
     }
 
     /// Lock Screen widgets set to Automatic show the first available metric.
-    static let automaticPriority = ["uv", "temperature", "nextEvent", "readiness", "steps", "sleep", "heart", "rain", "tomorrow"]
+    static let automaticPriority = ["uv", "temperature", "nextEvent", "readiness", "steps", "sleep", "heart", "hrv", "heartRate", "walkingHeartRate", "rain", "tomorrow"]
 }
 
 enum WidgetMetricChoice: String, CaseIterable, Identifiable {
@@ -40,6 +43,9 @@ enum WidgetMetricChoice: String, CaseIterable, Identifiable {
     case sleep
     case steps
     case heart
+    case heartRate
+    case hrv
+    case walkingHeartRate
     case nextEvent
 
     var id: String { rawValue }

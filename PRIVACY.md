@@ -8,7 +8,7 @@ Readout displays a personal dashboard and iOS widgets using sources you choose t
 
 With your permission, Readout reads:
 
-- **Apple Health:** today's steps, resting heart rate, and, in Apple Health mode, sleep samples written by Oura. Readiness scores are not available through this fallback.
+- **Apple Health:** today's steps, heart rate, resting and walking heart rate, heart rate variability, and, in Apple Health mode, sleep samples written by Oura. Readiness scores are not available through this fallback.
 - **Calendar:** availability and timing for the next event from calendars you explicitly select on your iPhone. No calendars are selected automatically. Event titles are cached and displayed only if you enable them in Calendar privacy settings.
 - **Oura account:** readiness and sleep data from Oura's API after you authorize account access.
 - **Weather:** a forecast for your approximate location or a city you choose.

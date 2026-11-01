@@ -112,6 +112,9 @@ enum WidgetPrivacy {
         case "sleep": return "Sleep"
         case "steps": return "Steps"
         case "heart": return "Resting heart rate"
+        case "heartRate": return "Heart rate"
+        case "hrv": return "HRV"
+        case "walkingHeartRate": return "Walking heart rate"
         default: return "Health"
         }
     }

@@ -83,7 +83,8 @@ final class WidgetPrivacyTests: XCTestCase {
     func testMetricChoicesUseStableCacheIDsAndAutomaticNeedsNoPrimary() {
         let choices: [(WidgetMetricChoice, String)] = [
             (.automatic, ""), (.uv, "uv"), (.temperature, "temperature"), (.rain, "rain"), (.tomorrow, "tomorrow"),
-            (.readiness, "readiness"), (.sleep, "sleep"), (.steps, "steps"), (.heart, "heart"), (.nextEvent, "nextEvent")
+            (.readiness, "readiness"), (.sleep, "sleep"), (.steps, "steps"), (.heart, "heart"),
+            (.heartRate, "heartRate"), (.hrv, "hrv"), (.walkingHeartRate, "walkingHeartRate"), (.nextEvent, "nextEvent")
         ]
         for (choice, expectedID) in choices {
             XCTAssertEqual(choice.metricID, expectedID)
@@ -105,9 +106,14 @@ final class WidgetPrivacyTests: XCTestCase {
     func testDiscreetHealthRemovesValuesAndAllIndirectValueChannels() throws {
         let metrics = [
             healthMetric("readiness"), healthMetric("sleep"),
-            healthMetric("steps", source: .appleHealth), healthMetric("heart", source: .appleHealth)
+            healthMetric("steps", source: .appleHealth), healthMetric("heart", source: .appleHealth),
+            healthMetric("heartRate", source: .appleHealth), healthMetric("hrv", source: .appleHealth),
+            healthMetric("walkingHeartRate", source: .appleHealth)
         ]
-        let expectedTitles = ["readiness": "Readiness", "sleep": "Sleep", "steps": "Steps", "heart": "Resting heart rate"]
+        let expectedTitles = [
+            "readiness": "Readiness", "sleep": "Sleep", "steps": "Steps", "heart": "Resting heart rate",
+            "heartRate": "Heart rate", "hrv": "HRV", "walkingHeartRate": "Walking heart rate"
+        ]
         let rendered = WidgetPrivacy.render(metrics, mode: .discreet)
         XCTAssertEqual(rendered.count, metrics.count)
 

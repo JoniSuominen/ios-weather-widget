@@ -339,7 +339,7 @@ private struct SourcesView: View {
     private func description(_ source: DataSource) -> String {
         switch source {
         case .weather: return "Temperature, UV index, rain, and tomorrow's forecast"
-        case .appleHealth: return "Steps and resting heart rate"
+        case .appleHealth: return "Steps, heart rate, resting heart rate, and HRV"
         case .oura:
             return connectorManager.ouraConnectionMethod == .direct
                 ? "Readiness and sleep from your Oura account"
@@ -530,7 +530,7 @@ private struct PermissionPrimer: View {
         case .weather:
             return "Weather comes from Open-Meteo. Use your approximate location, or choose a city if you prefer not to share location. Only a rounded coordinate is sent."
         case .appleHealth:
-            return "Reads your step count and resting heart rate from Apple Health. Nothing is written to your health records. Choose the categories to share on the next iOS screen."
+            return "Reads your step count, heart rate, resting and walking heart rate, and heart rate variability from Apple Health. Pick which one each tile shows in Widgets. Nothing is written to your health records. Choose the categories to share on the next iOS screen."
         case .oura where ouraMethod == .direct:
             return "Sign in with Oura to read your readiness and sleep. Oura and a secure sign-in service handle authorization and credential refresh. Access credentials are protected in the iOS Keychain. You can disconnect from Sources at any time."
         case .oura:

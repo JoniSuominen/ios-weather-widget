@@ -105,6 +105,9 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         .init(id: "sleep", source: .oura, title: "Sleep", value: "7h 42m", detail: "Score 91", symbol: "moon.stars.fill", tint: "indigo"),
         .init(id: "steps", source: .appleHealth, title: "Steps", value: "8,420", detail: "84% of goal", symbol: "figure.walk", tint: "mint", numericValue: 8420, targetValue: 10000),
         .init(id: "heart", source: .appleHealth, title: "Resting heart rate", value: "62", detail: "bpm resting", symbol: "heart.fill", tint: "pink"),
+        .init(id: "heartRate", source: .appleHealth, title: "Heart rate", value: "71", detail: "bpm · 14:05", symbol: "heart.fill", tint: "pink"),
+        .init(id: "hrv", source: .appleHealth, title: "HRV", value: "48", detail: "ms · 07:12", symbol: "heart.fill", tint: "pink"),
+        .init(id: "walkingHeartRate", source: .appleHealth, title: "Walking heart rate", value: "98", detail: "bpm · 31 Oct", symbol: "heart.fill", tint: "pink"),
         .init(id: "nextEvent", source: .googleCalendar, title: "Up next", value: "Busy", detail: "", symbol: "calendar", tint: "blue",
               observedAt: Date.now.addingTimeInterval(24 * 60), privateValue: "Design sync", endsAt: Date.now.addingTimeInterval(54 * 60))
     ]

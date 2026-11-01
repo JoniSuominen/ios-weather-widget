@@ -1,6 +1,6 @@
 # Readout
 
-Readout is an iOS 17 SwiftUI app that packs data from several sources into one compact Home Screen widget, so more apps fit on your first page. It combines weather and UV index, Apple Health steps and resting heart rate, Oura readiness and sleep, and your next calendar event.
+Readout is an iOS 17 SwiftUI app that packs data from several sources into one compact Home Screen widget, so more apps fit on your first page. It combines weather and UV index, Apple Health steps and heart data (heart rate, resting or walking heart rate, or HRV, chosen per tile), Oura readiness and sleep, and your next calendar event.
 
 ## Features
 

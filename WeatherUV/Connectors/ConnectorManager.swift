@@ -204,10 +204,19 @@ final class ConnectorManager: ObservableObject {
            calendar.clearSnapshotIfAccessUnavailable() {
             calendarPreferencesDidChange()
         }
+        // Offer Health types added by an update; new grants need a fresh fetch.
+        var permissionsChanged = false
+        if connectedSources.contains(.appleHealth), !isResetting,
+           let health = connectors[.appleHealth] as? HealthKitConnector,
+           await health.needsAuthorizationRequest() {
+            permissionsChanged = (try? await health.authorize()) != nil
+        }
         for source in DataSource.allCases where connectedSources.contains(source) {
             guard !Task.isCancelled else { return }
             let fetchedAt = DashboardStore.updatedAt(for: source) ?? .distantPast
-            if Date.now.timeIntervalSince(fetchedAt) >= minimumInterval { await refresh(source) }
+            if Date.now.timeIntervalSince(fetchedAt) >= minimumInterval || (source == .appleHealth && permissionsChanged) {
+                await refresh(source)
+            }
         }
     }
 
