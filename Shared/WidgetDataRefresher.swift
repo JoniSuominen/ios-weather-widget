@@ -38,30 +38,42 @@ enum WidgetDataRefresher {
         now: Date,
         connectorFor: @MainActor (DataSource) -> (any DashboardConnector)?
     ) async {
-        var published = false
-        for source in DataSource.allCases where DashboardStore.connectedSources.contains(source) {
-            guard let connector = connectorFor(source) else { continue }
-            if !userInitiated, let fetchedAt = DashboardStore.updatedAt(for: source),
-               now.timeIntervalSince(fetchedAt) < passiveMinimumAge {
-                continue
+        // Sources fetch side by side; a timeline has only seconds to finish.
+        let published = await withTaskGroup(of: Bool.self) { group in
+            for source in DataSource.allCases where DashboardStore.connectedSources.contains(source) {
+                guard let connector = connectorFor(source) else { continue }
+                if !userInitiated, let fetchedAt = DashboardStore.updatedAt(for: source),
+                   now.timeIntervalSince(fetchedAt) < passiveMinimumAge {
+                    continue
+                }
+                group.addTask { await WidgetDataRefresher.refresh(source, using: connector, userInitiated: userInitiated) }
             }
-            let calendarRevision = CalendarPreferences.revision
-            do {
-                let metrics = try await connector.refresh()
-                // Disconnecting or changing calendar privacy during the fetch wins.
-                guard DashboardStore.connectedSources.contains(source),
-                      source != .googleCalendar || calendarRevision == CalendarPreferences.revision else { continue }
-                DashboardStore.replaceMetrics(metrics, for: source)
-                published = true
-            } catch {
-                guard userInitiated, DashboardStore.connectedSources.contains(source),
-                      !isTemporarilyUnreadable(error) else { continue }
-                DashboardStore.recordError(error.localizedDescription, for: source)
-                published = true
-            }
+            return await group.reduce(false) { $0 || $1 }
         }
         if published && userInitiated {
             WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+
+    /// Returns true when the shared cache changed.
+    private static func refresh(
+        _ source: DataSource,
+        using connector: any DashboardConnector,
+        userInitiated: Bool
+    ) async -> Bool {
+        let calendarRevision = CalendarPreferences.revision
+        do {
+            let metrics = try await connector.refresh()
+            // Disconnecting or changing calendar privacy during the fetch wins.
+            guard DashboardStore.connectedSources.contains(source),
+                  source != .googleCalendar || calendarRevision == CalendarPreferences.revision else { return false }
+            DashboardStore.replaceMetrics(metrics, for: source)
+            return true
+        } catch {
+            guard userInitiated, DashboardStore.connectedSources.contains(source),
+                  !isTemporarilyUnreadable(error) else { return false }
+            DashboardStore.recordError(error.localizedDescription, for: source)
+            return true
         }
     }
 

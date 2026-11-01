@@ -75,26 +75,34 @@ final class HealthKitConnector: DashboardConnector {
         ]
     }
 
+    /// The queries run side by side; widget refreshes have little time.
     private func heartMetrics() async throws -> [DashboardMetric] {
-        var metrics: [DashboardMetric] = []
-        for heart in HeartMetric.all {
-            guard let type = HKQuantityType.quantityType(forIdentifier: heart.identifier) else { continue }
-            let sample = try await latestQuantitySample(for: type)
-            let value = sample?.quantity.doubleValue(for: heart.unit)
-            metrics.append(DashboardMetric(
-                id: heart.id,
-                source: .appleHealth,
-                title: heart.title,
-                value: value.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "—",
-                detail: sample.map { "\(heart.unitLabel) · \(Self.sampleTime($0.endDate))" } ?? "No measurement found",
-                symbol: "heart.fill",
-                tint: "pink",
-                numericValue: value,
-                observedAt: sample?.endDate,
-                origin: sample?.sourceRevision.source.name
-            ))
+        try await withThrowingTaskGroup(of: (Int, DashboardMetric).self) { group in
+            for (index, heart) in HeartMetric.all.enumerated() {
+                guard let type = HKQuantityType.quantityType(forIdentifier: heart.identifier) else { continue }
+                group.addTask { (index, try await self.heartMetric(heart, type: type)) }
+            }
+            var metrics: [(Int, DashboardMetric)] = []
+            for try await metric in group { metrics.append(metric) }
+            return metrics.sorted { $0.0 < $1.0 }.map(\.1)
         }
-        return metrics
+    }
+
+    private func heartMetric(_ heart: HeartMetric, type: HKQuantityType) async throws -> DashboardMetric {
+        let sample = try await latestQuantitySample(for: type)
+        let value = sample?.quantity.doubleValue(for: heart.unit)
+        return DashboardMetric(
+            id: heart.id,
+            source: .appleHealth,
+            title: heart.title,
+            value: value.map { $0.formatted(.number.precision(.fractionLength(0))) } ?? "—",
+            detail: sample.map { "\(heart.unitLabel) · \(Self.sampleTime($0.endDate))" } ?? "No measurement found",
+            symbol: "heart.fill",
+            tint: "pink",
+            numericValue: value,
+            observedAt: sample?.endDate,
+            origin: sample?.sourceRevision.source.name
+        )
     }
 
     /// A clock time today, else a date. Unlike "5 min ago", it stays correct
