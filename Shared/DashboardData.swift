@@ -48,6 +48,13 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
     /// steps and forecast, the end time for an event. Cached metrics are
     /// dropped from this instant on.
     let expiresAt: Date?
+    /// The app or device behind the value, such as "Oura" or a watch name.
+    /// App only: the widget privacy projection drops it.
+    let origin: String?
+
+    var originLabel: String {
+        origin ?? (source == .weather ? "Open-Meteo" : source.displayName)
+    }
 
     func isExpired(at date: Date) -> Bool {
         guard let expiresAt else { return false }
@@ -69,7 +76,8 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         observedAt: Date? = nil,
         privateValue: String? = nil,
         endsAt: Date? = nil,
-        expiresAt: Date? = nil
+        expiresAt: Date? = nil,
+        origin: String? = nil
     ) {
         self.id = id
         self.source = source
@@ -84,6 +92,7 @@ struct DashboardMetric: Codable, Identifiable, Hashable {
         self.privateValue = privateValue
         self.endsAt = endsAt
         self.expiresAt = expiresAt
+        self.origin = origin
     }
 
     /// A normalized, finite goal or score. Metrics without a meaningful target

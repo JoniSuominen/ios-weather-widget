@@ -117,6 +117,15 @@ final class WidgetDataTests: XCTestCase {
         XCTAssertNil(metrics.first?.endsAt)
     }
 
+    func testOriginFallsBackToTheSourceForLegacySnapshots() throws {
+        let json = """
+        [{"id":"uv","source":"Weather","title":"UV index","value":"5","detail":"Moderate","symbol":"sun.max.fill","tint":"yellow"}]
+        """
+        let metrics = try JSONDecoder().decode([DashboardMetric].self, from: Data(json.utf8))
+        XCTAssertNil(metrics.first?.origin)
+        XCTAssertEqual(metrics.first?.originLabel, "Open-Meteo")
+    }
+
     func testCachedMetricsKeepCatalogOrderAcrossSources() {
         DashboardStore.replaceMetrics([metric("steps")], for: .appleHealth)
         DashboardStore.replaceMetrics([metric("uv", source: .weather), metric("temperature", source: .weather)], for: .weather)

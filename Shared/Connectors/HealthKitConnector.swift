@@ -90,7 +90,8 @@ final class HealthKitConnector: DashboardConnector {
                 symbol: "heart.fill",
                 tint: "pink",
                 numericValue: value,
-                observedAt: sample?.endDate
+                observedAt: sample?.endDate,
+                origin: sample?.sourceRevision.source.name
             ))
         }
         return metrics
@@ -110,7 +111,7 @@ final class HealthKitConnector: DashboardConnector {
         }
         let start = Calendar.current.startOfDay(for: .now)
         let predicate = HKQuery.predicateForSamples(withStart: start, end: .now)
-        let statistics = try await statistics(for: type, predicate: predicate, options: .cumulativeSum)
+        let statistics = try await statistics(for: type, predicate: predicate, options: [.cumulativeSum, .separateBySource])
         let count = statistics?.sumQuantity()?.doubleValue(for: .count())
         let value = count?.formatted(.number.precision(.fractionLength(0))) ?? "—"
         return DashboardMetric(
@@ -125,8 +126,15 @@ final class HealthKitConnector: DashboardConnector {
             targetValue: 10000,
             observedAt: count == nil ? nil : .now,
             // Today's total must not be shown as tomorrow's.
-            expiresAt: Calendar.current.date(byAdding: .day, value: 1, to: start)
+            expiresAt: Calendar.current.date(byAdding: .day, value: 1, to: start),
+            origin: Self.originNames(statistics?.sources)
         )
+    }
+
+    /// Health merges overlapping step samples; name every app that counted.
+    private static func originNames(_ sources: [HKSource]?) -> String? {
+        let names = Array(Set((sources ?? []).map(\.name))).sorted()
+        return names.isEmpty ? nil : names.formatted(.list(type: .and))
     }
 
     private func statistics(

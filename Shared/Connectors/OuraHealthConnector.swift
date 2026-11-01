@@ -41,7 +41,8 @@ final class OuraHealthConnector: DashboardConnector {
             symbol: "moon.stars.fill",
             tint: "indigo",
             numericValue: asleep > 0 ? asleep : nil,
-            observedAt: ouraSamples.map(\.endDate).max()
+            observedAt: ouraSamples.map(\.endDate).max(),
+            origin: ouraSamples.first.map { "\($0.sourceRevision.source.name) via Apple Health" }
         )
         return [sleepMetric]
     }

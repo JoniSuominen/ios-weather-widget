@@ -234,8 +234,15 @@ final class WidgetPrivacyTests: XCTestCase {
             id: id, source: source, title: "SECRET health title", value: "SECRET health value",
             detail: "SECRET health detail", symbol: "heart.fill", tint: "pink",
             numericValue: 86, targetValue: 100, observedAt: Date(timeIntervalSince1970: 1_800_000_000),
-            privateValue: "SECRET hidden health value"
+            privateValue: "SECRET hidden health value", origin: "SECRET device name"
         )
+    }
+
+    func testWidgetsNeverReceiveTheDeviceThatRecordedAValue() {
+        for mode in WidgetPrivacyMode.allCases {
+            let rendered = WidgetPrivacy.render([healthMetric("hrv", source: .appleHealth)], mode: mode)
+            XCTAssertNil(rendered.first?.origin)
+        }
     }
 
     private func calendarMetric(

@@ -335,7 +335,8 @@ final class OuraAPIConnector: DashboardConnector {
             detail: latestReadiness.map { "Oura · \($0.day)" } ?? "No recent Oura readiness data",
             symbol: "sparkles", tint: "violet",
             numericValue: readinessScore.map(Double.init), targetValue: 100,
-            observedAt: latestReadiness.flatMap { observationDate(timestamp: $0.timestamp, day: $0.day) }
+            observedAt: latestReadiness.flatMap { observationDate(timestamp: $0.timestamp, day: $0.day) },
+            origin: "Oura account"
         )
         let summary = dailySleep.max { $0.day < $1.day }
         let mainSleeps = sleep.filter { $0.type == "long_sleep" && ($0.totalSleepDuration ?? 0) > 0 }
@@ -357,7 +358,8 @@ final class OuraAPIConnector: DashboardConnector {
             symbol: "moon.stars.fill", tint: "indigo",
             numericValue: duration.map(Double.init) ?? sleepScore.map(Double.init),
             targetValue: duration != nil ? nil : 100,
-            observedAt: sleepDay.flatMap { observationDate(timestamp: mainSleep?.bedtimeEnd ?? summary?.timestamp, day: $0) }
+            observedAt: sleepDay.flatMap { observationDate(timestamp: mainSleep?.bedtimeEnd ?? summary?.timestamp, day: $0) },
+            origin: "Oura account"
         )
         return [readinessMetric, sleepMetric]
     }
